@@ -8,8 +8,8 @@ type Recipe = {
   id: number; title: string; caption: string | null; description: string | null;
   user_id: string; is_public: boolean; image_url: string | null; created_at: string;
 };
-
 type CommentRow = { id:number; body:string; created_at:string; user_id:string };
+type Profile = { id:string; username:string|null; avatar_url:string|null };
 
 export default function RecipeDetailPage() {
   const { id } = useParams<{id:string}>();
@@ -21,6 +21,7 @@ export default function RecipeDetailPage() {
   const [comments, setComments] = useState<CommentRow[]>([]);
   const [newComment, setNewComment] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
+  const [author, setAuthor] = useState<Profile | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -36,6 +37,16 @@ export default function RecipeDetailPage() {
         .maybeSingle();
       if (recErr || !rec) { alert('Recipe not found or not visible'); return; }
       setRecipe(rec as any);
+
+      // author profile
+      if ((rec as any).user_id) {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('id,username,avatar_url')
+          .eq('id', (rec as any).user_id)
+          .maybeSingle();
+        setAuthor((prof ?? null) as any);
+      }
 
       // 2) steps
       const { data: st } = await supabase
@@ -70,6 +81,11 @@ export default function RecipeDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recipeId]);
 
+  function avatarUrl(path: string | null) {
+    if (!path) return null;
+    return supabase.storage.from('profile-avatars').getPublicUrl(path).data.publicUrl;
+  }
+
   async function postComment() {
     if (!userId) { alert('Sign in to comment'); return; }
     const body = newComment.trim();
@@ -89,6 +105,23 @@ export default function RecipeDetailPage() {
   return (
     <div style={{ display:'grid', gap:12 }}>
       <h2>{recipe.title}</h2>
+
+      {/* Author credit */}
+      {author && (
+        <div style={{ display:'flex', alignItems:'center', gap:10, margin:'6px 0 4px' }}>
+          {author.avatar_url && (
+            <img
+              src={avatarUrl(author.avatar_url)!}
+              alt=""
+              style={{ width:28, height:28, borderRadius:'50%' }}
+            />
+          )}
+          <span style={{ fontSize:13, opacity:.85 }}>
+            by {author.username ?? 'Unknown cook'}
+          </span>
+        </div>
+      )}
+
       {imgUrl && <img src={imgUrl} alt="" style={{ width:'100%', maxHeight:360, objectFit:'cover', borderRadius:8 }}/>}
       {recipe.caption && <p><em>{recipe.caption}</em></p>}
       {recipe.description && <p>{recipe.description}</p>}

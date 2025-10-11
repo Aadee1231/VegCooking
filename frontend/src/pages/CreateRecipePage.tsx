@@ -7,6 +7,7 @@ import {
   type IngredientRow
 } from '../lib/ingredients';
 import { useNavigate } from 'react-router-dom';
+import * as XLSX from "xlsx";
 
 type Step = { position: number; body: string; timer_seconds?: number | null };
 type Line = {
@@ -19,7 +20,82 @@ type Line = {
 
 const UNITS = ['g','kg','ml','l','tsp','tbsp','cup','pc'];
 
-/** Lightweight combobox: search input at top + scrollable list beneath */
+/** ========== SPREADSHEET IMPORT FUNCTION ========== **/
+async function importSpreadsheet(file: File, userId: string) {
+  const data = await file.arrayBuffer();
+  const workbook = XLSX.read(data);
+  const importedRecipes: any[] = [];
+
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet);
+    if (rows.length === 0) continue;
+
+    const recipeName = (rows[0] as any)["Recipe Name"] || sheetName;
+    const ingredientNames: string[] = [];
+    const steps: string[] = [];
+
+    // 🔹 Go through each row
+    for (const r of rows) {
+      const row = r as any;
+      const ingredient = (row["Ingredient"] || "").toString().trim();
+      const instruction = (row["Instructions"] || "").toString().trim();
+
+      if (ingredient) ingredientNames.push(ingredient);
+      if (instruction) steps.push(instruction);
+    }
+
+    // 1️⃣ Create the recipe
+    const { data: rec, error: recErr } = await supabase
+      .from("recipes")
+      .insert({
+        user_id: userId,
+        title: recipeName,
+        caption: "",
+        description: "", // we’ll use steps instead
+        servings: null,
+        is_public: false,
+      })
+      .select("id")
+      .single();
+    if (recErr) throw recErr;
+    const recipeId = rec.id;
+
+    // 2️⃣ Add unique ingredients
+    let pos = 1;
+    for (const ingredientName of [...new Set(ingredientNames)]) {
+      if (!ingredientName) continue;
+      const { data: ing, error: ingErr } = await supabase.rpc(
+        "create_or_get_ingredient",
+        { p_name: ingredientName }
+      );
+      if (ingErr) throw ingErr;
+
+      await supabase.from("recipe_ingredients").insert({
+        recipe_id: recipeId,
+        ingredient_id: ing.id,
+        position: pos++,
+      });
+    }
+
+    // 3️⃣ Add steps (one row per instruction)
+    pos = 1;
+    for (const s of steps) {
+      await supabase.from("recipe_steps").insert({
+        recipe_id: recipeId,
+        position: pos++,
+        body: s,
+      });
+    }
+
+    importedRecipes.push(recipeName);
+  }
+
+  return importedRecipes;
+}
+
+
+/** ========== INGREDIENT COMBO ========== **/
 function IngredientCombo({
   value,
   onPick,
@@ -37,7 +113,7 @@ function IngredientCombo({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // load results on query change
+  // Load results when query changes
   useEffect(() => {
     if (!open) return;
     const id = setTimeout(async () => {
@@ -54,7 +130,7 @@ function IngredientCombo({
     return () => clearTimeout(id);
   }, [q, open]);
 
-  // close on outside click
+  // Close dropdown when clicking outside
   useEffect(() => {
     if (!open) return;
     function onDoc(e: MouseEvent) {
@@ -92,14 +168,12 @@ function IngredientCombo({
     if (!confirm(`Delete ingredient "${row.name}"? (Will fail if used by any recipe)`)) return;
     try {
       await apiDeleteIngredient(row.id);
-      // remove from list; clear current selection if we just deleted it
       setItems(prev => prev.filter(x => x.id !== row.id));
       if (value?.id === row.id) {
         setQ('');
-        onPick({ id: 0, name: '', created_by: null } as any); // clear
+        onPick({ id: 0, name: '', created_by: null } as any);
       }
     } catch (e: any) {
-      // Most common: foreign key restriction
       alert(e.message ?? 'Delete failed. It may be used by a recipe.');
     }
   }
@@ -110,7 +184,7 @@ function IngredientCombo({
         ref={inputRef}
         placeholder="Search or add ingredient…"
         value={q}
-        onChange={e => { setQ(e.target.value); if (!open) setOpen(true); }}
+        onChange={(e) => { setQ(e.target.value); if (!open) setOpen(true); }}
         onFocus={() => setOpen(true)}
         onKeyDown={(e) => {
           if (!open) return;
@@ -169,6 +243,7 @@ function IngredientCombo({
   );
 }
 
+/** ========== MAIN PAGE ========== **/
 export default function CreateRecipePage() {
   const [title, setTitle] = useState('');
   const [caption, setCaption] = useState('');
@@ -179,7 +254,6 @@ export default function CreateRecipePage() {
   const [lines, setLines] = useState<Line[]>([{ position:1 }]);
   const [cover, setCover] = useState<File | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -219,7 +293,7 @@ export default function CreateRecipePage() {
       const { data: rec, error: recErr } = await supabase
         .from('recipes')
         .insert({
-          user_id: user.id, // DB also has default auth.uid()
+          user_id: user.id,
           title, caption, description,
           servings: servings === '' ? null : Number(servings),
           is_public: isPublic
@@ -281,6 +355,24 @@ export default function CreateRecipePage() {
         <div>
           <label>Cover image (optional): </label>
           <input type="file" accept="image/*" onChange={e=>setCover(e.target.files?.[0] ?? null)} />
+        </div>
+
+        {/* === SPREADSHEET UPLOAD === */}
+        <div>
+          <label>Import recipes from spreadsheet: </label>
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const user = (await supabase.auth.getUser()).data.user;
+              if (!user) return alert("Please sign in first.");
+
+              const imported = await importSpreadsheet(file, user.id);
+              alert(`${imported.length} recipes imported!`);
+            }}
+          />
         </div>
       </div>
 

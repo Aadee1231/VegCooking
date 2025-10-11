@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { startOfWeek, addDays, fmtISODate, niceDate } from "../lib/date";
 import SearchableRecipeSelect, { type RecipeOpt } from "../components/SearchableRecipeSelect";
+import { Link } from "react-router-dom";
 
 type Meal = "breakfast" | "lunch" | "dinner" | "snack";
 const MEALS: Meal[] = ["breakfast", "lunch", "dinner", "snack"];
@@ -44,20 +45,27 @@ export default function MealPlanPage() {
         .lte("plan_date", to);
       setPlans((rows ?? []) as any);
 
-      // recipes you can see (yours + public)
-      const { data: recs } = await supabase
+      // recipes you can use: yours + ones you added
+    const { data: own } = await supabase
         .from("recipes")
-        .select("id,title,user_id,is_public")
-        .or(
-          `is_public.eq.true,user_id.eq.${
-            uid || "00000000-0000-0000-0000-000000000000"
-          }`
-        )
-        .order("created_at", { ascending: false })
-        .limit(500);
-      setRecipes((recs ?? []) as any);
+        .select("id,title,user_id,is_public,created_at")
+        .eq("user_id", uid)
+        .order("created_at", { ascending: false });
+
+    const { data: added } = await supabase
+        .from("user_added_recipes")
+        .select("recipe:recipes(id,title,user_id,is_public,created_at)")
+        .eq("user_id", uid)
+        .order("created_at", { ascending: false });
+
+    const combined = [
+        ...(own ?? []),
+        ...((added ?? []).map((a: any) => a.recipe))
+    ];
+
+    setRecipes(combined as any);
+
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekStart]);
 
   function prevWeek() {
@@ -228,6 +236,15 @@ export default function MealPlanPage() {
                               placeholder="(choose recipe)"
                               disabled={busy}
                             />
+                            
+                            {cell?.recipe_id && (
+                            <Link 
+                                to={`/r/${cell.recipe_id}`} 
+                                style={{ fontSize: 13, color: "#0b73f7" }}
+                            >
+                                View details →
+                            </Link>
+                            )}
                           </div>
                         ) : (
                           <div style={{ display: "grid", gap: 6 }}>
