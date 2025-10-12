@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
+import { Link, useSearchParams } from "react-router-dom";
 
 type Recipe = {
   id: number;
@@ -10,7 +10,8 @@ type Recipe = {
   created_at: string;
   likes_count: number;
   comments_count: number;
-  user_id: string; // must be exposed by public_recipes_with_stats
+  user_id: string;
+  tags?: string[] | null;
 };
 
 type Profile = { id: string; username: string | null; avatar_url: string | null };
@@ -20,135 +21,166 @@ export default function FeedPage() {
   const [liking, setLiking] = useState<number | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [profileMap, setProfileMap] = useState<Record<string, Profile>>({});
+  const [searchParams] = useSearchParams();
+  const tagFilter = searchParams.get("tag");
 
   useEffect(() => {
     (async () => {
       const { data: session } = await supabase.auth.getSession();
       setUserId(session.session?.user?.id ?? null);
 
-      const { data, error } = await supabase
-        .from('public_recipes_with_stats')
-        .select('*') // must include user_id
-        .order('created_at', { ascending: false })
-        .limit(30);
+      let query = supabase
+        .from("public_recipes_with_stats")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(50);
 
-      if (error) { console.error(error); return; }
+      if (tagFilter) query = query.contains("tags", [tagFilter]);
+
+      const { data, error } = await query;
+      if (error) return console.error(error);
       setItems((data ?? []) as any);
 
-      // Load author profiles in one batch
-      const list = (data ?? []) as any[];
-      const userIds = Array.from(new Set(list.map(r => r.user_id).filter(Boolean)));
+      const userIds = Array.from(new Set((data ?? []).map((r: any) => r.user_id)));
       if (userIds.length) {
         const { data: profs } = await supabase
-          .from('profiles')
-          .select('id,username,avatar_url')
-          .in('id', userIds);
-
+          .from("profiles")
+          .select("id,username,avatar_url")
+          .in("id", userIds);
         const map: Record<string, Profile> = {};
-        (profs ?? []).forEach(p => { map[p.id] = p as any; });
+        (profs ?? []).forEach((p) => (map[p.id] = p as any));
         setProfileMap(map);
       }
     })();
-  }, []);
+  }, [tagFilter]);
 
   async function toggleLike(recipeId: number) {
-    if (!userId) { alert('Sign in to like'); return; }
+    if (!userId) return alert("Sign in to like");
     setLiking(recipeId);
     try {
-      const { error } = await supabase.from('likes').insert({ user_id: userId, recipe_id: recipeId });
+      const { error } = await supabase.from("likes").insert({ user_id: userId, recipe_id: recipeId });
       if (error) {
-        // Already liked → unlike
-        await supabase.from('likes').delete().eq('user_id', userId).eq('recipe_id', recipeId);
+        await supabase.from("likes").delete().eq("user_id", userId).eq("recipe_id", recipeId);
       }
-      // Refresh this card's counts
       const { data } = await supabase
-        .from('public_recipes_with_stats')
-        .select('*')
-        .eq('id', recipeId)
+        .from("public_recipes_with_stats")
+        .select("*")
+        .eq("id", recipeId)
         .single();
-      setItems(prev => prev.map(it => it.id === recipeId ? (data as Recipe) : it));
+      setItems((prev) => prev.map((it) => (it.id === recipeId ? (data as Recipe) : it)));
     } finally {
       setLiking(null);
     }
   }
 
   async function addToMyRecipes(recipeId: number) {
-    if (!userId) { alert('Sign in to add recipes'); return; }
-    const { error } = await supabase.from('user_added_recipes').insert({
-      user_id: userId,
-      recipe_id: recipeId
-    });
+    if (!userId) return alert("Sign in to add recipes");
+    const { error } = await supabase.from("user_added_recipes").insert({ user_id: userId, recipe_id: recipeId });
     if (error) {
-      if ((error as any).code === '23505') {
-        alert('Already added to your recipes');
-      } else {
-        alert(error.message);
-      }
-    } else {
-      alert('Recipe added to your account!');
-    }
+      if ((error as any).code === "23505") alert("Already added");
+      else alert(error.message);
+    } else alert("Recipe added to your account!");
   }
 
   function imgUrl(path: string | null) {
     if (!path) return null;
-    return supabase.storage.from('recipe-media').getPublicUrl(path).data.publicUrl;
+    return supabase.storage.from("recipe-media").getPublicUrl(path).data.publicUrl;
   }
+
   function avatarUrl(path: string | null) {
-    if (!path) return null;
-    return supabase.storage.from('profile-avatars').getPublicUrl(path).data.publicUrl;
+    if (!path) return "/default-avatar.png";
+    return supabase.storage.from("profile-avatars").getPublicUrl(path).data.publicUrl;
   }
 
   return (
-    <div style={{ display: 'grid', gap: 12 }}>
-      <h2>Discover</h2>
-      {items.map(r => {
+    <div className="feed-grid">
+      {tagFilter && (
+        <div style={{ marginBottom: "1rem", textAlign: "center" }}>
+          <h3 style={{ color: "#2e7d32" }}>
+            Showing recipes tagged with <span style={{ fontWeight: 600 }}>#{tagFilter}</span>
+          </h3>
+          <Link to="/" style={{ fontSize: "0.9rem", color: "#1565c0" }}>
+            Clear filter
+          </Link>
+        </div>
+      )}
+
+      {items.map((r) => {
         const author = profileMap[r.user_id];
         return (
-          <article key={r.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12 }}>
-            {r.image_url && (
-              <img
-                src={imgUrl(r.image_url)!}
-                alt=""
-                style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 8 }}
-              />
-            )}
-
-            <h3 style={{ margin: '8px 0' }}>
-              <Link to={`/r/${r.id}`}>{r.title}</Link>
-            </h3>
-
-            {/* Author credit */}
+          <article key={r.id} className="recipe-card">
+            {/* --- Author Row --- */}
             {author && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px' }}>
-                {author.avatar_url && (
-                  <img
-                    src={avatarUrl(author.avatar_url)!}
-                    alt=""
-                    style={{ width: 24, height: 24, borderRadius: '50%' }}
-                  />
-                )}
-                <span style={{ fontSize: 13, opacity: .85 }}>
-                  by {author.username ?? 'Unknown cook'}
-                </span>
+              <div className="author">
+                <img src={avatarUrl(author.avatar_url)!} alt="" />
+                <div>
+                  <span style={{ fontWeight: 600 }}>{author.username ?? "Unknown cook"}</span>
+                  <div style={{ fontSize: "0.8rem", color: "#777" }}>
+                    {new Date(r.created_at).toLocaleDateString()}
+                  </div>
+                </div>
               </div>
             )}
 
-            {r.caption && <p>{r.caption}</p>}
+            {/* --- Image --- */}
+            {r.image_url && (
+              <img
+                src={imgUrl(r.image_url)!}
+                alt={r.title}
+                style={{
+                  width: "100%",
+                  borderRadius: "10px",
+                  objectFit: "cover",
+                  marginTop: "10px",
+                }}
+              />
+            )}
 
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <button onClick={() => toggleLike(r.id)} disabled={liking === r.id}>
-                {liking === r.id ? '...' : '♥'} {r.likes_count}
-              </button>
-              <span>💬 {r.comments_count}</span>
-              <button onClick={() => addToMyRecipes(r.id)}>➕ Add</button>
-              <span style={{ marginLeft: 'auto', opacity: .7 }}>
-                {new Date(r.created_at).toLocaleString()}
-              </span>
+            {/* --- Title & Caption --- */}
+            <div className="recipe-card-content">
+              <h3>
+                <Link to={`/r/${r.id}`}>{r.title}</Link>
+              </h3>
+              {r.caption && <p style={{ marginTop: "4px", color: "#555" }}>{r.caption}</p>}
             </div>
+
+            {/* --- Buttons --- */}
+            <div style={{ marginTop: "10px", display: "flex", gap: "10px", alignItems: "center" }}>
+              <button className="btn" onClick={() => toggleLike(r.id)} disabled={liking === r.id}>
+                {liking === r.id ? "..." : "♥"} {r.likes_count}
+              </button>
+              <button className="btn btn-secondary" onClick={() => addToMyRecipes(r.id)}>
+                ➕ Add
+              </button>
+            </div>
+
+            {/* --- Tags --- */}
+            {r.tags && (
+              <div style={{ marginTop: "10px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {r.tags.map((tag) => (
+                  <Link
+                    key={tag}
+                    to={`/?tag=${encodeURIComponent(tag)}`}
+                    style={{
+                      background: "#e8f5e9",
+                      color: "#2e7d32",
+                      padding: "4px 10px",
+                      borderRadius: "12px",
+                      fontSize: "0.8rem",
+                    }}
+                  >
+                    #{tag}
+                  </Link>
+                ))}
+              </div>
+            )}
           </article>
         );
       })}
-      {items.length === 0 && <p>No public recipes yet. Create one!</p>}
+
+      {items.length === 0 && (
+        <p style={{ color: "#777", textAlign: "center", marginTop: "2rem" }}>No recipes yet!</p>
+      )}
     </div>
   );
 }

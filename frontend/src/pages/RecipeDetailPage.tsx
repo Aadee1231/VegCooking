@@ -1,174 +1,328 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { useEffect, useState } from "react";
+import { useParams, Link } from "react-router-dom";
+import { supabase } from "../lib/supabase";
 
-type Step = { position: number; body: string; timer_seconds: number | null };
-type Line = { position: number; quantity: number | null; unit_code: string | null; notes: string | null; ingredient: { id:number; name:string } };
 type Recipe = {
-  id: number; title: string; caption: string | null; description: string | null;
-  user_id: string; is_public: boolean; image_url: string | null; created_at: string;
+  id: number;
+  title: string;
+  caption: string | null;
+  description: string | null;
+  image_url: string | null;
+  created_at: string;
+  user_id: string;
+  tags?: string[] | null;
 };
-type CommentRow = { id:number; body:string; created_at:string; user_id:string };
-type Profile = { id:string; username:string|null; avatar_url:string|null };
+
+type Profile = { id: string; username: string | null; avatar_url: string | null };
+
+type Ingredient = {
+  id: number;
+  name: string;
+  quantity: number | null;
+  unit_code: string | null;
+  notes: string | null;
+};
+
+type Step = { id: number; position: number; body: string };
+type Comment = { id: number; body: string; created_at: string; profiles: Profile };
 
 export default function RecipeDetailPage() {
-  const { id } = useParams<{id:string}>();
-  const recipeId = Number(id);
+  const { id } = useParams<{ id: string }>();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
-  const [steps, setSteps] = useState<Step[]>([]);
-  const [lines, setLines] = useState<Line[]>([]);
-  const [imgUrl, setImgUrl] = useState<string | null>(null);
-  const [comments, setComments] = useState<CommentRow[]>([]);
-  const [newComment, setNewComment] = useState('');
-  const [userId, setUserId] = useState<string | null>(null);
   const [author, setAuthor] = useState<Profile | null>(null);
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [steps, setSteps] = useState<Step[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    (async () => {
-      const { data: sess } = await supabase.auth.getSession();
-      const uid = sess.session?.user?.id ?? null;
-      setUserId(uid);
+    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
+    if (id) fetchRecipe(Number(id));
+  }, [id]);
 
-      // 1) recipe (visible if public or mine)
-      const { data: rec, error: recErr } = await supabase
-        .from('recipes')
-        .select('*')
-        .eq('id', recipeId)
-        .maybeSingle();
-      if (recErr || !rec) { alert('Recipe not found or not visible'); return; }
-      setRecipe(rec as any);
+  async function fetchRecipe(recipeId: number) {
+    const { data: rec, error } = await supabase
+      .from("recipes")
+      .select("*")
+      .eq("id", recipeId)
+      .single();
+    if (error) return console.error(error);
+    setRecipe(rec as Recipe);
 
-      // author profile
-      if ((rec as any).user_id) {
-        const { data: prof } = await supabase
-          .from('profiles')
-          .select('id,username,avatar_url')
-          .eq('id', (rec as any).user_id)
-          .maybeSingle();
-        setAuthor((prof ?? null) as any);
-      }
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("id,username,avatar_url")
+      .eq("id", rec.user_id)
+      .single();
+    setAuthor(prof as Profile);
 
-      // 2) steps
-      const { data: st } = await supabase
-        .from('recipe_steps')
-        .select('position,body,timer_seconds')
-        .eq('recipe_id', recipeId)
-        .order('position');
-      setSteps((st ?? []) as any);
+    const { data: ings } = await supabase
+      .from("recipe_ingredients_view")
+      .select("id,name,quantity,unit_code,notes")
+      .eq("recipe_id", recipeId)
+      .order("position");
+    setIngredients(ings || []);
 
-      // 3) ingredients (joined)
-      const { data: ri } = await supabase
-        .from('recipe_ingredients')
-        .select('position,quantity,unit_code,notes,ingredient:ingredients(id,name)')
-        .eq('recipe_id', recipeId)
-        .order('position');
-      setLines((ri ?? []) as any);
+    const { data: st } = await supabase
+      .from("recipe_steps")
+      .select("id,position,body")
+      .eq("recipe_id", recipeId)
+      .order("position");
+    setSteps(st || []);
 
-      // 4) image public URL
-      if ((rec as any).image_url) {
-        const { data } = supabase.storage.from('recipe-media').getPublicUrl((rec as any).image_url);
-        setImgUrl(data.publicUrl);
-      }
-
-      // 5) comments
-      const { data: cm } = await supabase
-        .from('comments')
-        .select('id,body,created_at,user_id')
-        .eq('recipe_id', recipeId)
-        .order('created_at', { ascending: true });
-      setComments((cm ?? []) as any);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recipeId]);
-
-  function avatarUrl(path: string | null) {
-    if (!path) return null;
-    return supabase.storage.from('profile-avatars').getPublicUrl(path).data.publicUrl;
+    const { data: comm } = await supabase
+      .from("comments")
+      .select("id,body,created_at,profiles(id,username,avatar_url)")
+      .eq("recipe_id", recipeId)
+      .order("created_at", { ascending: false });
+    setComments(
+      (comm || []).map((c: any) => ({
+        ...c,
+        profiles: Array.isArray(c.profiles) ? c.profiles[0] : c.profiles,
+      }))
+    );
   }
 
   async function postComment() {
-    if (!userId) { alert('Sign in to comment'); return; }
-    const body = newComment.trim();
-    if (!body) return;
-    const { data, error } = await supabase
-      .from('comments')
-      .insert({ recipe_id: recipeId, user_id: userId, body })
-      .select('id,body,created_at,user_id')
-      .single();
-    if (error) { alert(error.message); return; }
-    setComments(prev => [...prev, data as any]);
-    setNewComment('');
+    if (!userId) return alert("Sign in to comment.");
+    if (!newComment.trim()) return;
+    const { error } = await supabase
+      .from("comments")
+      .insert({ user_id: userId, recipe_id: recipe?.id, body: newComment });
+    if (error) return alert(error.message);
+    setNewComment("");
+    fetchRecipe(recipe!.id);
   }
 
-  if (!recipe) return <div>Loading…</div>;
+  function imgUrl(path: string | null) {
+    if (!path) return null;
+    return supabase.storage.from("recipe-media").getPublicUrl(path).data.publicUrl;
+  }
+
+  function avatarUrl(path: string | null) {
+    if (!path) return "/default-avatar.png";
+    return supabase.storage.from("profile-avatars").getPublicUrl(path).data.publicUrl;
+  }
+
+  if (!recipe) return <p style={{ textAlign: "center" }}>Loading recipe...</p>;
 
   return (
-    <div style={{ display:'grid', gap:12 }}>
-      <h2>{recipe.title}</h2>
-
-      {/* Author credit */}
-      {author && (
-        <div style={{ display:'flex', alignItems:'center', gap:10, margin:'6px 0 4px' }}>
-          {author.avatar_url && (
-            <img
-              src={avatarUrl(author.avatar_url)!}
-              alt=""
-              style={{ width:28, height:28, borderRadius:'50%' }}
-            />
-          )}
-          <span style={{ fontSize:13, opacity:.85 }}>
-            by {author.username ?? 'Unknown cook'}
-          </span>
-        </div>
+    <div
+      style={{
+        maxWidth: "700px",
+        margin: "0 auto",
+        background: "#fff",
+        borderRadius: "14px",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+        overflow: "hidden",
+      }}
+    >
+      {/* === Cover Image === */}
+      {recipe.image_url && (
+        <img
+          src={imgUrl(recipe.image_url)!}
+          alt={recipe.title}
+          style={{
+            width: "100%",
+            height: "400px",
+            objectFit: "cover",
+            borderBottom: "1px solid #eee",
+          }}
+        />
       )}
 
-      {imgUrl && <img src={imgUrl} alt="" style={{ width:'100%', maxHeight:360, objectFit:'cover', borderRadius:8 }}/>}
-      {recipe.caption && <p><em>{recipe.caption}</em></p>}
-      {recipe.description && <p>{recipe.description}</p>}
+      {/* === Content === */}
+      <div style={{ padding: "24px" }}>
+        <h2 style={{ marginBottom: "6px", color: "#2e7d32" }}>{recipe.title}</h2>
+        {recipe.caption && (
+          <p style={{ color: "#555", fontSize: "0.95rem", marginBottom: "12px" }}>
+            {recipe.caption}
+          </p>
+        )}
 
-      <section>
-        <h3>Ingredients</h3>
-        <ul>
-          {lines.map(l => (
-            <li key={l.position}>
-              {l.quantity ?? ''} {l.unit_code ?? ''} {l.ingredient?.name}
-              {l.notes ? ` — ${l.notes}` : ''}
-            </li>
-          ))}
-        </ul>
-      </section>
+        {/* === Author === */}
+        {author && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              marginBottom: "18px",
+            }}
+          >
+            <img
+              src={avatarUrl(author.avatar_url)!}
+              alt={author.username ?? ""}
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: "50%",
+                objectFit: "cover",
+              }}
+            />
+            <div>
+              <strong>{author.username ?? "Unknown cook"}</strong>
+              <div style={{ fontSize: "0.85rem", color: "#777" }}>
+                {new Date(recipe.created_at).toLocaleDateString()}
+              </div>
+            </div>
+          </div>
+        )}
 
-      <section>
-        <h3>Steps</h3>
-        <ol>
-          {steps.map(s => (
-            <li key={s.position}>
-              {s.body} {s.timer_seconds ? `(${s.timer_seconds}s)` : ''}
-            </li>
-          ))}
-        </ol>
-      </section>
+        {/* === Tags === */}
+        {recipe.tags && recipe.tags.length > 0 && (
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "1.5rem" }}>
+            {recipe.tags.map((tag) => (
+              <Link
+                key={tag}
+                to={`/?tag=${encodeURIComponent(tag)}`}
+                style={{
+                  background: "#e8f5e9",
+                  color: "#2e7d32",
+                  padding: "4px 10px",
+                  borderRadius: "12px",
+                  fontSize: "0.85rem",
+                }}
+              >
+                #{tag}
+              </Link>
+            ))}
+          </div>
+        )}
 
-      <section>
-        <h3>Comments</h3>
-        <div style={{ display:'grid', gap:8 }}>
-          {comments.map(c => (
-            <div key={c.id} style={{ padding:8, border:'1px solid #eee', borderRadius:6 }}>
-              <div style={{ fontSize:12, opacity:.7 }}>{new Date(c.created_at).toLocaleString()}</div>
-              <div>{c.body}</div>
+        {/* === Ingredients === */}
+        <section style={{ marginBottom: "1.5rem" }}>
+          <h3 style={{ color: "#2e7d32", marginBottom: "10px" }}>Ingredients</h3>
+          <ul style={{ listStyle: "none", paddingLeft: 0 }}>
+            {ingredients.length > 0 ? (
+              ingredients.map((ing) => (
+                <li
+                  key={ing.id}
+                  style={{
+                    padding: "8px 0",
+                    borderBottom: "1px solid #eee",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: "0.95rem",
+                  }}
+                >
+                  <span>
+                    {ing.quantity ?? ""} {ing.unit_code ?? ""} {ing.name}
+                  </span>
+                  {ing.notes && (
+                    <span style={{ color: "#777", fontSize: "0.85rem" }}>
+                      {ing.notes}
+                    </span>
+                  )}
+                </li>
+              ))
+            ) : (
+              <p style={{ color: "#777", fontSize: "0.9rem" }}>
+                No ingredients listed for this recipe.
+              </p>
+            )}
+          </ul>
+        </section>
+
+        {/* === Steps === */}
+        <section style={{ marginBottom: "1.5rem" }}>
+          <h3 style={{ color: "#2e7d32", marginBottom: "10px" }}>Steps</h3>
+          <ol style={{ paddingLeft: "1.2rem" }}>
+            {steps.length > 0 ? (
+              steps.map((s) => (
+                <li
+                  key={s.id}
+                  style={{
+                    marginBottom: "0.9rem",
+                    lineHeight: "1.5",
+                    color: "#333",
+                  }}
+                >
+                  {s.body}
+                </li>
+              ))
+            ) : (
+              <p style={{ color: "#777", fontSize: "0.9rem" }}>No steps added yet.</p>
+            )}
+          </ol>
+        </section>
+
+        {/* === Description === */}
+        {recipe.description && (
+          <section style={{ marginBottom: "1.5rem" }}>
+            <h3 style={{ color: "#2e7d32", marginBottom: "10px" }}>Description</h3>
+            <p style={{ color: "#555", lineHeight: "1.6" }}>{recipe.description}</p>
+          </section>
+        )}
+
+        {/* === Comments === */}
+        <section>
+          <h3 style={{ color: "#2e7d32", marginBottom: "10px" }}>Comments</h3>
+          <div
+            style={{
+              display: "flex",
+              gap: "10px",
+              marginBottom: "12px",
+              alignItems: "center",
+            }}
+          >
+            <input
+              placeholder="Write a comment..."
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              style={{
+                flex: 1,
+                padding: "10px",
+                borderRadius: "8px",
+                border: "1px solid #ddd",
+                fontSize: "0.95rem",
+              }}
+            />
+            <button className="btn" onClick={postComment}>
+              Post
+            </button>
+          </div>
+
+          {comments.length === 0 && (
+            <p style={{ color: "#777" }}>No comments yet. Be the first!</p>
+          )}
+
+          {comments.map((c) => (
+            <div
+              key={c.id}
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "10px",
+                padding: "10px 0",
+                borderBottom: "1px solid #eee",
+              }}
+            >
+              {c.profiles?.avatar_url && (
+                <img
+                  src={avatarUrl(c.profiles.avatar_url)!}
+                  alt=""
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: "50%",
+                    objectFit: "cover",
+                    marginTop: "2px",
+                  }}
+                />
+              )}
+              <div>
+                <strong>{c.profiles?.username ?? "Anonymous"}</strong>
+                <p style={{ margin: "4px 0", fontSize: "0.95rem" }}>{c.body}</p>
+                <small style={{ color: "#777" }}>
+                  {new Date(c.created_at).toLocaleString()}
+                </small>
+              </div>
             </div>
           ))}
-          <div style={{ display:'flex', gap:8 }}>
-            <input
-              style={{ flex:1 }}
-              placeholder="Add a comment…"
-              value={newComment}
-              onChange={e=>setNewComment(e.target.value)}
-            />
-            <button onClick={postComment}>Post</button>
-          </div>
-        </div>
-      </section>
+        </section>
+      </div>
     </div>
   );
 }

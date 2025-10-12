@@ -23,10 +23,7 @@ export default function MealPlanPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
 
-  const days = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
-    [weekStart]
-  );
+  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
 
   useEffect(() => {
     (async () => {
@@ -37,7 +34,6 @@ export default function MealPlanPage() {
       const from = fmtISODate(days[0]);
       const to = fmtISODate(days[6]);
 
-      // meal_plans for this week
       const { data: rows } = await supabase
         .from("meal_plans")
         .select("*")
@@ -45,26 +41,20 @@ export default function MealPlanPage() {
         .lte("plan_date", to);
       setPlans((rows ?? []) as any);
 
-      // recipes you can use: yours + ones you added
-    const { data: own } = await supabase
+      const { data: own } = await supabase
         .from("recipes")
         .select("id,title,user_id,is_public,created_at")
         .eq("user_id", uid)
         .order("created_at", { ascending: false });
 
-    const { data: added } = await supabase
+      const { data: added } = await supabase
         .from("user_added_recipes")
         .select("recipe:recipes(id,title,user_id,is_public,created_at)")
         .eq("user_id", uid)
         .order("created_at", { ascending: false });
 
-    const combined = [
-        ...(own ?? []),
-        ...((added ?? []).map((a: any) => a.recipe))
-    ];
-
-    setRecipes(combined as any);
-
+      const combined = [...(own ?? []), ...((added ?? []).map((a: any) => a.recipe))];
+      setRecipes(combined as any);
     })();
   }, [weekStart]);
 
@@ -96,7 +86,6 @@ export default function MealPlanPage() {
     setSavingKey(key);
     try {
       await requireUser();
-
       const existing = plans.find((p) => p.plan_date === iso && p.meal === meal);
       if (!existing) {
         const { data: inserted, error } = await supabase
@@ -121,10 +110,7 @@ export default function MealPlanPage() {
             recipe_id: Object.prototype.hasOwnProperty.call(data, "recipe_id")
               ? data.recipe_id!
               : existing.recipe_id,
-            external_name: Object.prototype.hasOwnProperty.call(
-              data,
-              "external_name"
-            )
+            external_name: Object.prototype.hasOwnProperty.call(data, "external_name")
               ? data.external_name ?? null
               : existing.external_name,
           })
@@ -157,25 +143,44 @@ export default function MealPlanPage() {
   }
 
   return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <h2>Meal Plan</h2>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <button onClick={prevWeek}>← Prev</button>
-        <button onClick={resetToday}>This Week</button>
-        <button onClick={nextWeek}>Next →</button>
-        <strong style={{ marginLeft: 8 }}>
-          {niceDate(days[0])} – {niceDate(days[6])}
-        </strong>
+    <div className="card" style={{ padding: "2rem", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+      {/* === Header === */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          flexWrap: "wrap",
+          justifyContent: "space-between",
+          gap: "10px",
+        }}
+      >
+        <h2 style={{ color: "#2e7d32", fontSize: "1.6rem" }}>Meal Planner</h2>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button className="btn" onClick={prevWeek}>← Prev</button>
+          <button className="btn" onClick={resetToday}>This Week</button>
+          <button className="btn" onClick={nextWeek}>Next →</button>
+        </div>
       </div>
 
+      <p style={{ color: "#555" }}>
+        {niceDate(days[0])} – {niceDate(days[6])}
+      </p>
+
+      {/* === Grid === */}
       <div style={{ overflowX: "auto" }}>
-        <table style={{ borderCollapse: "separate", borderSpacing: 8, width: "100%" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "separate",
+            borderSpacing: "0 10px",
+          }}
+        >
           <thead>
             <tr>
-              <th style={{ textAlign: "left" }}>Meal / Day</th>
+              <th style={{ padding: "10px", color: "#2e7d32", fontWeight: "600", textAlign: "left" }}>Meal / Day</th>
               {days.map((d) => (
-                <th key={d.toISOString()} style={{ textAlign: "left" }}>
-                  {niceDate(d)}
+                <th key={d.toISOString()} style={{ padding: "10px", color: "#2e7d32", textAlign: "center" }}>
+                  {niceDate(d).split(" ")[0]}
                 </th>
               ))}
             </tr>
@@ -183,45 +188,63 @@ export default function MealPlanPage() {
           <tbody>
             {MEALS.map((meal) => (
               <tr key={meal}>
-                <th style={{ textTransform: "capitalize" }}>{meal}</th>
+                <th
+                  style={{
+                    textTransform: "capitalize",
+                    textAlign: "left",
+                    padding: "10px 14px",
+                    background: "#f4f9f4",
+                    color: "#2e7d32",
+                    borderRadius: "10px",
+                  }}
+                >
+                  {meal}
+                </th>
                 {days.map((d) => {
                   const cell = getCell(d, meal);
                   const key = `${fmtISODate(d)}-${meal}`;
                   const busy = savingKey === key;
-                  return (
-                    <td
-                      key={key}
-                      style={{
-                        border: "1px solid #eee",
-                        borderRadius: 8,
-                        padding: 8,
-                        minWidth: 260,
-                        verticalAlign: "top",
-                      }}
-                    >
-                      <div style={{ display: "grid", gap: 6 }}>
-                        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <span>Location:</span>
-                          <select
-                            value={cell?.location ?? "home"}
-                            onChange={(e) => {
-                              const loc = e.target.value as "home" | "outside";
-                              saveCell(d, meal, {
-                                location: loc,
-                                recipe_id: loc === "outside" ? null : (cell?.recipe_id ?? null),
-                                external_name: loc === "outside" ? (cell?.external_name ?? "") : null,
-                              });
-                            }}
-                            disabled={busy}
-                          >
-                            <option value="home">Home</option>
-                            <option value="outside">Outside</option>
-                          </select>
-                        </label>
 
+                  return (
+                    <td key={key} style={{ padding: "8px", textAlign: "center" }}>
+                      <div
+                        style={{
+                          background: cell ? "#ffffff" : "#f9f9f9",
+                          border: "1px solid #e5e5e5",
+                          borderRadius: "12px",
+                          padding: "12px",
+                          minWidth: 180,
+                          boxShadow: cell ? "0 2px 8px rgba(0,0,0,0.05)" : "none",
+                          transition: "0.2s",
+                        }}
+                      >
+                        {/* Location selector */}
+                        <select
+                          value={cell?.location ?? "home"}
+                          onChange={(e) => {
+                            const loc = e.target.value as "home" | "outside";
+                            saveCell(d, meal, {
+                              location: loc,
+                              recipe_id: loc === "outside" ? null : cell?.recipe_id ?? null,
+                              external_name: loc === "outside" ? cell?.external_name ?? "" : null,
+                            });
+                          }}
+                          disabled={busy}
+                          style={{
+                            width: "100%",
+                            padding: "6px",
+                            marginBottom: "8px",
+                            borderRadius: "8px",
+                            border: "1px solid #ccc",
+                          }}
+                        >
+                          <option value="home">Home</option>
+                          <option value="outside">Outside</option>
+                        </select>
+
+                        {/* Home Recipes */}
                         {(cell?.location ?? "home") === "home" ? (
-                          <div style={{ display: "grid", gap: 6 }}>
-                            <span style={{ fontSize: 12, opacity: 0.7 }}>Recipe</span>
+                          <>
                             <SearchableRecipeSelect
                               value={cell?.recipe_id ?? null}
                               onChange={(rid) =>
@@ -233,22 +256,25 @@ export default function MealPlanPage() {
                               }
                               options={recipes}
                               currentUserId={userId}
-                              placeholder="(choose recipe)"
+                              placeholder="Choose recipe..."
                               disabled={busy}
                             />
-                            
                             {cell?.recipe_id && (
-                            <Link 
-                                to={`/r/${cell.recipe_id}`} 
-                                style={{ fontSize: 13, color: "#0b73f7" }}
-                            >
+                              <Link
+                                to={`/r/${cell.recipe_id}`}
+                                style={{
+                                  display: "inline-block",
+                                  marginTop: "6px",
+                                  color: "#1565c0",
+                                  fontSize: "0.9rem",
+                                }}
+                              >
                                 View details →
-                            </Link>
+                              </Link>
                             )}
-                          </div>
+                          </>
                         ) : (
-                          <div style={{ display: "grid", gap: 6 }}>
-                            <span style={{ fontSize: 12, opacity: 0.7 }}>Outside label</span>
+                          <>
                             <input
                               placeholder="e.g. Chipotle, Sushi w/ Sam"
                               value={cell?.external_name ?? ""}
@@ -260,15 +286,26 @@ export default function MealPlanPage() {
                                 })
                               }
                               disabled={busy}
+                              style={{
+                                width: "100%",
+                                padding: "6px",
+                                borderRadius: "8px",
+                                border: "1px solid #ccc",
+                              }}
                             />
-                          </div>
+                          </>
                         )}
 
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <button onClick={() => clearCell(d, meal)} disabled={!cell || busy}>
+                        {/* Buttons */}
+                        <div style={{ display: "flex", justifyContent: "center", gap: "8px", marginTop: "8px" }}>
+                          <button
+                            className="btn btn-danger"
+                            onClick={() => clearCell(d, meal)}
+                            disabled={!cell || busy}
+                          >
                             Clear
                           </button>
-                          {busy && <span>Saving…</span>}
+                          {busy && <span style={{ color: "#777" }}>Saving…</span>}
                         </div>
                       </div>
                     </td>
@@ -280,8 +317,8 @@ export default function MealPlanPage() {
         </table>
       </div>
 
-      <p style={{ opacity: 0.7 }}>
-        Tip: add recipes on the <strong>Create</strong> page.
+      <p style={{ opacity: 0.75, fontSize: "0.9rem", textAlign: "center" }}>
+        💡 Tip: Add or import recipes from the <strong>Create</strong> page to use them here.
       </p>
     </div>
   );

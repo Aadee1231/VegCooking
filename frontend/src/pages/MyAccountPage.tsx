@@ -1,128 +1,246 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
-import { Link } from 'react-router-dom';
-import ProfileEditor from '../components/ProfileEditor'; 
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
+import { Link } from "react-router-dom";
 
-type Recipe = { id:number; title:string; is_public:boolean; created_at:string };
-type Ingredient = { id:number; name:string };
-type AddedRecipe = { id:number; recipe:{id:number; title:string; created_at:string; user_id:string} };
-
+type Profile = { id: string; username: string | null; avatar_url: string | null };
+type Recipe = {
+  id: number;
+  title: string;
+  caption: string | null;
+  image_url: string | null;
+  created_at: string;
+};
 
 export default function MyAccountPage() {
-  const [uid, setUid] = useState<string | null>(null);
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [ings, setIngs] = useState<Ingredient[]>([]);
-  const [added, setAdded] = useState<AddedRecipe[]>([]);
-
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [ownRecipes, setOwnRecipes] = useState<Recipe[]>([]);
+  const [addedRecipes, setAddedRecipes] = useState<Recipe[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"own" | "added">("own");
 
   useEffect(() => {
-    (async () => {
-      const { data: sess } = await supabase.auth.getSession();
-      const userId = sess.session?.user?.id ?? null;
-      setUid(userId);
-      if (!userId) return;
-
-      const { data: r } = await supabase
-        .from('recipes')
-        .select('id,title,is_public,created_at')
-        .eq('user_id', userId)
-        .order('created_at', { ascending:false });
-      setRecipes((r ?? []) as any);
-
-      // added recipes
-    const { data: a } = await supabase
-      .from("user_added_recipes")
-      .select("id, recipe:recipes(id,title,created_at,user_id)")
-      .eq("user_id", userId)
-      .order("created_at", { ascending:false });
-    setAdded((a ?? []) as any);
-
-    // ingredients (same as before)
-    const { data: g } = await supabase
-      .from("ingredients")
-      .select("id,name")
-      .eq("created_by", userId)
-      .order("name");
-    setIngs((g ?? []) as any);
-    })();
+    supabase.auth.getUser().then(({ data }) => {
+      const uid = data.user?.id ?? null;
+      setUserId(uid);
+      if (uid) fetchProfile(uid);
+    });
   }, []);
 
-  async function togglePublic(id:number, isPublic:boolean) {
-    const { error, data } = await supabase
-      .from('recipes')
-      .update({ is_public: !isPublic })
-      .eq('id', id)
-      .select('id,is_public')
+  async function fetchProfile(uid: string) {
+    const { data: p } = await supabase
+      .from("profiles")
+      .select("id,username,avatar_url")
+      .eq("id", uid)
       .single();
-    if (!error) setRecipes(prev => prev.map(r => r.id===id ? { ...r, is_public: data!.is_public as any } : r));
+    setProfile(p);
+    fetchRecipes(uid);
   }
 
-  async function deleteRecipe(id: number) {
-  if (!confirm("Delete this recipe? (This will also delete its steps, ingredients, and comments)")) return;
-  const { error } = await supabase.from("recipes").delete().eq("id", id);
-  if (error) { alert(error.message); return; }
-  setRecipes(prev => prev.filter(r => r.id !== id));
-}
-
-async function deleteIngredient(id: number, name: string) {
-  if (!confirm(`Delete ingredient "${name}"? (Will fail if used by any recipe)`)) return;
-  const { error } = await supabase.from("ingredients").delete().eq("id", id);
-  if (error) { 
-    alert(error.message + " — it might still be used in a recipe."); 
-    return; 
+  async function fetchRecipes(uid: string) {
+    setLoading(true);
+    const [{ data: own }, { data: added }] = await Promise.all([
+      supabase
+        .from("recipes")
+        .select("id,title,caption,image_url,created_at")
+        .eq("user_id", uid)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("user_added_recipes")
+        .select("recipe:recipes(id,title,caption,image_url,created_at)")
+        .eq("user_id", uid)
+        .order("created_at", { ascending: false }),
+    ]);
+    setOwnRecipes(own || []);
+    setAddedRecipes((added ?? []).map((a: any) => a.recipe));
+    setLoading(false);
   }
-  setIngs(prev => prev.filter(i => i.id !== id));
-}
 
+  function avatarUrl(path: string | null) {
+    if (!path) return "/default-avatar.png";
+    return supabase.storage.from("profile-avatars").getPublicUrl(path).data.publicUrl;
+  }
 
-  if (!uid) return <p>Sign in to view your account.</p>;
+  function imgUrl(path: string | null) {
+    if (!path) return null;
+    return supabase.storage.from("recipe-media").getPublicUrl(path).data.publicUrl;
+  }
+
+  async function uploadAvatar(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !userId) return;
+    const path = `${userId}/avatar_${Date.now()}.jpg`;
+    const { error } = await supabase.storage
+      .from("profile-avatars")
+      .upload(path, file, { upsert: true });
+    if (error) return alert("Upload failed: " + error.message);
+    await supabase.from("profiles").update({ avatar_url: path }).eq("id", userId);
+    fetchProfile(userId);
+  }
+
+  if (!profile)
+    return <p style={{ textAlign: "center", marginTop: "2rem" }}>Loading profile...</p>;
+
+  const activeRecipes = tab === "own" ? ownRecipes : addedRecipes;
 
   return (
-    <div style={{ display:'grid', gap:16 }}>
-      <h2>My Account</h2>
+    <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
+      {/* === Profile Header === */}
+      <section
+        className="account-page"
+        style={{
+          padding: "2rem 2rem 1.5rem",
+          textAlign: "center",
+          background: "linear-gradient(135deg, #e8f5e9, #fff)",
+        }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
+          {/* Avatar */}
+          <div style={{ position: "relative" }}>
+            <img
+              src={avatarUrl(profile.avatar_url)!}
+              alt="Profile Avatar"
+              style={{
+                width: 120,
+                height: 120,
+                borderRadius: "50%",
+                objectFit: "cover",
+                border: "3px solid #2e7d32",
+              }}
+            />
+            <label
+              style={{
+                position: "absolute",
+                bottom: 0,
+                right: 0,
+                background: "#2e7d32",
+                color: "#fff",
+                padding: "4px 6px",
+                borderRadius: "50%",
+                fontSize: "0.8rem",
+                cursor: "pointer",
+              }}
+              title="Change Avatar"
+            >
+              ⬆
+              <input
+                type="file"
+                accept="image/*"
+                onChange={uploadAvatar}
+                style={{ display: "none" }}
+              />
+            </label>
+          </div>
 
-      <ProfileEditor /> 
+          {/* Username */}
+          <div>
+            <h2 style={{ fontSize: "1.6rem", color: "#2e7d32", marginBottom: "4px" }}>
+              {profile.username ?? "Your Profile"}
+            </h2>
+            <p style={{ color: "#666", fontSize: "0.9rem" }}>
+              {ownRecipes.length} Recipes • {addedRecipes.length} Saved
+            </p>
+          </div>
+        </div>
 
-      <section>
-        <h3>Your Recipes</h3>
-        {recipes.length===0 ? <p>No recipes yet. <Link to="/create">Create one</Link>.</p> : (
-            <ul style={{ paddingLeft:16 }}>
-            {recipes.map(r => (
-                <li key={r.id}>
-                <Link to={`/r/${r.id}`}>{r.title}</Link>
-                <span style={{ marginLeft:8, opacity:.7 }}>{new Date(r.created_at).toLocaleString()}</span>
-                <button style={{ marginLeft:12 }} onClick={()=>togglePublic(r.id, r.is_public)}>
-                    {r.is_public ? 'Make Private' : 'Make Public'}
-                </button>
-                <button style={{ marginLeft:8, color:'red' }} onClick={()=>deleteRecipe(r.id)}>
-                    🗑 Delete
-                </button>
-                </li>
-            ))}
-            </ul>
-        )}
+        {/* Tabs */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            gap: "1rem",
+            marginTop: "1.5rem",
+          }}
+        >
+          <button
+            onClick={() => setTab("own")}
+            style={{
+              background: tab === "own" ? "#2e7d32" : "#e8f5e9",
+              color: tab === "own" ? "white" : "#2e7d32",
+              border: "none",
+              borderRadius: "8px",
+              padding: "8px 14px",
+              fontWeight: 500,
+              cursor: "pointer",
+              transition: "0.2s",
+            }}
+          >
+            Your Recipes
+          </button>
+          <button
+            onClick={() => setTab("added")}
+            style={{
+              background: tab === "added" ? "#2e7d32" : "#e8f5e9",
+              color: tab === "added" ? "white" : "#2e7d32",
+              border: "none",
+              borderRadius: "8px",
+              padding: "8px 14px",
+              fontWeight: 500,
+              cursor: "pointer",
+              transition: "0.2s",
+            }}
+          >
+            Added Recipes
+          </button>
+        </div>
       </section>
 
+      {/* === Recipes Grid === */}
       <section>
-        <h3>Added Recipes</h3>
-        {added.length===0 ? <p>You haven’t added any public recipes yet.</p> : (
-            <ul style={{ paddingLeft:16 }}>
-            {added.map(a => (
-                <li key={a.id}>
-                <Link to={`/r/${a.recipe.id}`}>{a.recipe.title}</Link>
-                <span style={{ marginLeft:8, opacity:.7 }}>
-                    {new Date(a.recipe.created_at).toLocaleString()}
-                </span>
-                <button style={{ marginLeft:8, color:'red' }} onClick={async ()=>{
-                    if (!confirm("Remove from your added recipes?")) return;
-                    await supabase.from("user_added_recipes").delete().eq("id", a.id);
-                    setAdded(prev => prev.filter(x => x.id !== a.id));
-                }}>
-                    🗑 Remove
-                </button>
-                </li>
+        {loading ? (
+          <p style={{ textAlign: "center", color: "#777" }}>Loading recipes...</p>
+        ) : activeRecipes.length === 0 ? (
+          <p style={{ textAlign: "center", color: "#777" }}>
+            {tab === "own"
+              ? "You haven’t created any recipes yet."
+              : "You haven’t added any recipes yet."}
+          </p>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))",
+              gap: "1.5rem",
+              marginTop: "1rem",
+            }}
+          >
+            {activeRecipes.map((r) => (
+              <div key={r.id} className="card" style={{ overflow: "hidden" }}>
+                {r.image_url && (
+                  <Link to={`/r/${r.id}`}>
+                    <img
+                      src={imgUrl(r.image_url)!}
+                      alt={r.title}
+                      style={{
+                        width: "100%",
+                        height: 180,
+                        objectFit: "cover",
+                        borderBottom: "1px solid #eee",
+                      }}
+                    />
+                  </Link>
+                )}
+                <div style={{ padding: "12px 16px" }}>
+                  <h4
+                    style={{
+                      fontSize: "1rem",
+                      color: "#2e7d32",
+                      marginBottom: "4px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    <Link to={`/r/${r.id}`}>{r.title}</Link>
+                  </h4>
+                  <p style={{ color: "#666", fontSize: "0.9rem", marginBottom: "6px" }}>
+                    {r.caption ?? "No caption"}
+                  </p>
+                  <small style={{ color: "#999" }}>
+                    {new Date(r.created_at).toLocaleDateString()}
+                  </small>
+                </div>
+              </div>
             ))}
-            </ul>
+          </div>
         )}
       </section>
     </div>
