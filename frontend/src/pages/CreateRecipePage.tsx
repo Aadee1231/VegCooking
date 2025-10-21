@@ -121,11 +121,7 @@ function IngredientCombo({
   useEffect(() => {
     if (!open) return;
     function onDoc(e: MouseEvent) {
-      if (
-        panelRef.current &&
-        !panelRef.current.contains(e.target as Node) &&
-        inputRef.current !== e.target
-      ) {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node) && inputRef.current !== e.target) {
         setOpen(false);
       }
     }
@@ -165,38 +161,38 @@ function IngredientCombo({
       {open && (
         <div
           ref={panelRef}
+          className="card"
           style={{
             position: "absolute",
             zIndex: 10,
-            top: "100%",
+            top: "105%",
             left: 0,
             right: 0,
-            background: "#fff",
-            border: "1px solid #ddd",
-            borderRadius: 8,
             marginTop: 4,
-            boxShadow: "0 6px 20px rgba(0,0,0,.08)",
-            maxHeight: 200,
+            maxHeight: 220,
             overflow: "auto",
+            borderRadius: 10,
           }}
         >
           {loading ? (
-            <div style={{ padding: 8 }}>Searching...</div>
+            <div style={{ padding: 10 }}>Searching...</div>
           ) : items.length ? (
             items.map((row) => (
               <div
                 key={row.id}
                 onClick={() => choose(row)}
                 style={{
-                  padding: "8px 10px",
+                  padding: "10px 12px",
                   cursor: "pointer",
                   display: "flex",
                   justifyContent: "space-between",
+                  borderBottom: "1px solid #eee",
                 }}
               >
                 <span>{row.name}</span>
                 {row.created_by === currentUserId && (
                   <button
+                    className="btn btn-danger"
                     onClick={(e) => {
                       e.stopPropagation();
                       apiDeleteIngredient(row.id);
@@ -209,7 +205,10 @@ function IngredientCombo({
               </div>
             ))
           ) : (
-            <div style={{ padding: 8 }}>No matches — press Add</div>
+            <div style={{ padding: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>No matches — press Add</span>
+              <button className="btn" onClick={addNew}>Add</button>
+            </div>
           )}
         </div>
       )}
@@ -235,16 +234,10 @@ export default function CreateRecipePage() {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
   }, []);
 
-  function addStep() {
-    setSteps((p) => [...p, { position: p.length + 1, body: "" }]);
-  }
-  function addLine() {
-    setLines((p) => [...p, { position: p.length + 1 }]);
-  }
+  function addStep() { setSteps((p) => [...p, { position: p.length + 1, body: "" }]); }
+  function addLine() { setLines((p) => [...p, { position: p.length + 1 }]); }
   function removeLine(pos: number) {
-    setLines((p) =>
-      p.filter((l) => l.position !== pos).map((l, i) => ({ ...l, position: i + 1 }))
-    );
+    setLines((p) => p.filter((l) => l.position !== pos).map((l, i) => ({ ...l, position: i + 1 })));
   }
 
   async function ensureSignedIn() {
@@ -256,9 +249,7 @@ export default function CreateRecipePage() {
   async function uploadCover(userId: string, recipeId: number) {
     if (!cover) return null;
     const path = `${userId}/recipes/${recipeId}/cover_${Date.now()}.jpg`;
-    const { error } = await supabase.storage
-      .from("recipe-media")
-      .upload(path, cover, { upsert: true });
+    const { error } = await supabase.storage.from("recipe-media").upload(path, cover, { upsert: true });
     if (error) throw error;
     return path;
   }
@@ -282,11 +273,8 @@ export default function CreateRecipePage() {
       if (error) throw error;
       const recipeId = rec.id;
 
-      const stepsPayload = steps
-        .filter((s) => s.body.trim())
-        .map((s) => ({ recipe_id: recipeId, position: s.position, body: s.body }));
-      if (stepsPayload.length)
-        await supabase.from("recipe_steps").insert(stepsPayload);
+      const stepsPayload = steps.filter((s) => s.body.trim()).map((s) => ({ recipe_id: recipeId, position: s.position, body: s.body }));
+      if (stepsPayload.length) await supabase.from("recipe_steps").insert(stepsPayload);
 
       const ingPayload = lines
         .filter((l) => l.ingredient && l.ingredient.id)
@@ -298,12 +286,10 @@ export default function CreateRecipePage() {
           notes: l.notes ?? null,
           position: l.position,
         }));
-      if (ingPayload.length)
-        await supabase.from("recipe_ingredients").insert(ingPayload);
+      if (ingPayload.length) await supabase.from("recipe_ingredients").insert(ingPayload);
 
       const path = await uploadCover(user.id, recipeId);
-      if (path)
-        await supabase.from("recipes").update({ image_url: path }).eq("id", recipeId);
+      if (path) await supabase.from("recipes").update({ image_url: path }).eq("id", recipeId);
 
       alert("Recipe created!");
       navigate("/");
@@ -315,86 +301,54 @@ export default function CreateRecipePage() {
   }
 
   return (
-    <div
-      className="create-page"
-      style={{
-        padding: "2rem",
-        maxWidth: "750px",
-        margin: "0 auto",
-        background: "#fff",
-        borderRadius: "12px",
-        boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
-      }}
-    >
-      <h2 style={{ fontSize: "1.6rem", color: "#2e7d32", marginBottom: "1rem" }}>
-        Create Recipe
-      </h2>
+    <div className="card fade-in" style={{ padding: "1.5rem", maxWidth: 900, margin: "0 auto" }}>
+      <h2 style={{ fontSize: "1.6rem", color: "#2e7d32", marginBottom: "1rem" }}>Create Recipe</h2>
 
-      <input
-        placeholder="Recipe Title *"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-      />
-      <input
-        placeholder="Short Caption"
-        value={caption}
-        onChange={(e) => setCaption(e.target.value)}
-      />
-      <textarea
-        placeholder="Description"
-        rows={3}
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-      />
-
-      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-        <input
-          type="number"
-          placeholder="Servings"
-          value={servings}
-          onChange={(e) =>
-            setServings(e.target.value === "" ? "" : Number(e.target.value))
-          }
-        />
-        <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+      <div className="create-grid">
+        <input placeholder="Recipe Title *" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input placeholder="Short Caption" value={caption} onChange={(e) => setCaption(e.target.value)} />
+        <textarea placeholder="Description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} style={{ gridColumn: "1 / -1" }} />
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <input
-            type="checkbox"
-            checked={isPublic}
-            onChange={(e) => setIsPublic(e.target.checked)}
+            type="number"
+            placeholder="Servings"
+            value={servings}
+            onChange={(e) => setServings(e.target.value === "" ? "" : Number(e.target.value))}
+            style={{ width: 160 }}
           />
-          Public
-        </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />
+            Public
+          </label>
+        </div>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+          <label className="btn btn-secondary" style={{ cursor: "pointer" }}>
+            Upload Cover
+            <input type="file" accept="image/*" onChange={(e) => setCover(e.target.files?.[0] ?? null)} style={{ display: "none" }} />
+          </label>
+          <label className="btn btn-secondary" style={{ cursor: "pointer" }}>
+            Import .xlsx
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const user = (await supabase.auth.getUser()).data.user;
+                if (!user) return alert("Please sign in first.");
+                const imported = await importSpreadsheet(file, user.id);
+                alert(`${imported.length} recipes imported!`);
+              }}
+              style={{ display: "none" }}
+            />
+          </label>
+        </div>
       </div>
 
-      <div style={{ marginTop: "1rem", display: "flex", flexWrap: "wrap", gap: "1rem" }}>
-        <input type="file" accept="image/*" onChange={(e) => setCover(e.target.files?.[0] ?? null)} />
-        <input
-          type="file"
-          accept=".xlsx,.xls"
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            const user = (await supabase.auth.getUser()).data.user;
-            if (!user) return alert("Please sign in first.");
-            const imported = await importSpreadsheet(file, user.id);
-            alert(`${imported.length} recipes imported!`);
-          }}
-        />
-      </div>
-
-      <h3 style={{ color: "#2e7d32", marginTop: "1.5rem" }}>Ingredients</h3>
+      <h3 style={{ color: "#2e7d32", marginTop: "1.2rem" }}>Ingredients</h3>
       {lines.map((l) => (
-        <div
-          key={l.position}
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "8px",
-            alignItems: "center",
-            marginBottom: "8px",
-          }}
-        >
-          <span>#{l.position}</span>
+        <div key={l.position} className="line-row" style={{ marginBottom: 8 }}>
+          <span style={{ textAlign: "center", color: "#666" }}>#{l.position}</span>
           <IngredientCombo
             value={l.ingredient ?? null}
             onPick={(row) =>
@@ -413,11 +367,7 @@ export default function CreateRecipePage() {
             onChange={(e) =>
               setLines((prev) => {
                 const next = [...prev];
-                next[l.position - 1] = {
-                  ...l,
-                  quantity:
-                    e.target.value === "" ? null : Number(e.target.value),
-                };
+                next[l.position - 1] = { ...l, quantity: e.target.value === "" ? null : Number(e.target.value) };
                 return next;
               })
             }
@@ -427,18 +377,13 @@ export default function CreateRecipePage() {
             onChange={(e) =>
               setLines((prev) => {
                 const next = [...prev];
-                next[l.position - 1] = {
-                  ...l,
-                  unit_code: e.target.value || null,
-                };
+                next[l.position - 1] = { ...l, unit_code: e.target.value || null };
                 return next;
               })
             }
           >
             <option value="">unit</option>
-            {UNITS.map((u) => (
-              <option key={u}>{u}</option>
-            ))}
+            {UNITS.map((u) => <option key={u}>{u}</option>)}
           </select>
           <input
             placeholder="Notes"
@@ -451,39 +396,34 @@ export default function CreateRecipePage() {
               })
             }
           />
-          <button onClick={() => removeLine(l.position)}>✖</button>
+          <button className="btn btn-danger" onClick={() => removeLine(l.position)}>✖</button>
         </div>
       ))}
-      <button onClick={addLine}>+ Add Ingredient</button>
+      <button className="btn btn-secondary" onClick={addLine}>+ Add Ingredient</button>
 
-      <h3 style={{ color: "#2e7d32", marginTop: "1.5rem" }}>Steps</h3>
+      <h3 style={{ color: "#2e7d32", marginTop: "1.2rem" }}>Steps</h3>
       {steps.map((s) => (
-        <div key={s.position} style={{ marginBottom: 8 }}>
+        <div key={s.position} className="step-block" style={{ marginBottom: 8 }}>
           <strong>Step {s.position}</strong>
           <textarea
             placeholder="Describe this step..."
             value={s.body}
             onChange={(e) => {
               const body = e.target.value;
-              setSteps((prev) =>
-                prev.map((x) =>
-                  x.position === s.position ? { ...x, body } : x
-                )
-              );
+              setSteps((prev) => prev.map((x) => (x.position === s.position ? { ...x, body } : x)));
             }}
+            style={{ marginTop: 6, width: "100%" }}
+            rows={3}
           />
         </div>
       ))}
-      <button onClick={addStep}>+ Add Step</button>
+      <button className="btn btn-secondary" onClick={addStep}>+ Add Step</button>
 
-      <button
-        className="btn"
-        style={{ marginTop: "1.5rem" }}
-        disabled={loading || !title.trim()}
-        onClick={onCreate}
-      >
-        {loading ? "Saving..." : "Create Recipe"}
-      </button>
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button className="btn" style={{ marginTop: "1.2rem" }} disabled={loading || !title.trim()} onClick={onCreate}>
+          {loading ? "Saving..." : "Create Recipe"}
+        </button>
+      </div>
     </div>
   );
 }

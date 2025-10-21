@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import "./App.css";
 
-
 type SearchResult = {
   id: number | string;
   type: "recipe" | "user" | "tag";
@@ -14,7 +13,7 @@ type SearchResult = {
 
 export default function App() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [profile, setProfile] = useState<{ username?: string; avatar_url?: string | null }>({});
+  const [profile, setProfile] = useState<{ username?: string | null; avatar_url?: string | null }>({});
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [focused, setFocused] = useState(false);
@@ -58,13 +57,7 @@ export default function App() {
         .ilike("title", `%${term}%`)
         .limit(3);
       (recipes ?? []).forEach((r) =>
-        res.push({
-          id: r.id,
-          type: "recipe",
-          title: r.title,
-          subtitle: r.caption,
-          image: r.image_url,
-        })
+        res.push({ id: r.id, type: "recipe", title: r.title, subtitle: r.caption ?? undefined, image: r.image_url })
       );
 
       // search users
@@ -74,28 +67,14 @@ export default function App() {
         .ilike("username", `%${term}%`)
         .limit(3);
       (users ?? []).forEach((u) =>
-        res.push({
-          id: u.id,
-          type: "user",
-          title: u.username ?? "Unnamed User",
-          image: u.avatar_url,
-        })
+        res.push({ id: u.id, type: "user", title: u.username ?? "Unnamed User", image: u.avatar_url })
       );
 
       // search tags
-      const { data: tags } = await supabase
-        .from("recipes")
-        .select("tags")
-        .not("tags", "is", null);
+      const { data: tags } = await supabase.from("recipes").select("tags").not("tags", "is", null);
       const uniqueTags = new Set<string>();
-      (tags ?? []).forEach((r: any) => {
-        (r.tags ?? []).forEach((t: string) => {
-          if (t.toLowerCase().includes(term)) uniqueTags.add(t);
-        });
-      });
-      Array.from(uniqueTags).slice(0, 5).forEach((tag) =>
-        res.push({ id: tag, type: "tag", title: `#${tag}` })
-      );
+      (tags ?? []).forEach((r: any) => (r.tags ?? []).forEach((t: string) => t.toLowerCase().includes(term) && uniqueTags.add(t)));
+      Array.from(uniqueTags).slice(0, 5).forEach((tag) => res.push({ id: tag, type: "tag", title: `#${tag}` }));
 
       setResults(res);
     }, 250);
@@ -107,121 +86,78 @@ export default function App() {
     navigate("/auth");
   }
 
-  function avatarUrl(path: string | null) {
+  function avatarUrl(path: string | null | undefined) {
     if (!path) return "/default-avatar.png";
     return supabase.storage.from("profile-avatars").getPublicUrl(path).data.publicUrl;
+  }
+  function imgUrl(path: string | null | undefined) {
+    if (!path) return null;
+    return supabase.storage.from("recipe-media").getPublicUrl(path).data.publicUrl;
   }
 
   return (
     <>
       {/* === HEADER === */}
-      <header
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          background: "rgba(255,255,255,0.95)",
-          backdropFilter: "blur(10px)",
-          borderBottom: "1px solid #e0e0e0",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
-          padding: "12px 28px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          zIndex: 99,
-        }}
-      >
-        {/* === Left: Logo === */}
+      <header>
+        {/* Left: Logo */}
         <Link to="/" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <h1
-            style={{
-              fontWeight: 800,
-              fontSize: "1.6rem",
-              background: "linear-gradient(90deg, #2e7d32, #1b5e20)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}
-          >
-            VegCooking
-          </h1>
+          <h1 className="brand">VegCooking</h1>
         </Link>
 
-        {/* === Center: Search Bar === */}
-        <div style={{ position: "relative", flex: "0 1 400px" }}>
+        {/* Center: Search */}
+        <div style={{ position: "relative", flex: "0 1 480px" }}>
           <input
             type="text"
             placeholder="Search recipes, users, or tags..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onFocus={() => setFocused(true)}
-            onBlur={() => setTimeout(() => setFocused(false), 200)}
-            style={{
-              width: "100%",
-              padding: "8px 12px",
-              borderRadius: "8px",
-              border: "1px solid #ccc",
-              fontSize: "0.95rem",
-              background: "#fafafa",
-            }}
+            onBlur={() => setTimeout(() => setFocused(false), 180)}
+            style={{ width: "100%" }}
           />
           {focused && results.length > 0 && (
             <div
+              className="card fade-in"
               style={{
                 position: "absolute",
                 top: "105%",
                 left: 0,
                 right: 0,
-                background: "white",
-                borderRadius: "10px",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
                 overflow: "hidden",
                 zIndex: 200,
+                borderRadius: 12,
               }}
             >
               {results.map((r) => (
                 <Link
                   key={`${r.type}-${r.id}`}
-                  to={
-                    r.type === "recipe"
-                      ? `/r/${r.id}`
-                      : r.type === "user"
-                      ? `/u/${r.id}`
-                      : `/?tag=${encodeURIComponent(r.id)}`
-                  }
+                  to={r.type === "recipe" ? `/r/${r.id}` : r.type === "user" ? `/u/${r.id}` : `/?tag=${encodeURIComponent(r.id)}`}
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: "10px",
+                    gap: 12,
                     padding: "10px 12px",
-                    borderBottom: "1px solid #eee",
-                    fontSize: "0.95rem",
-                    color: "#333",
-                    transition: "background 0.2s",
+                    borderBottom: "1px solid #eaeaea",
+                    fontSize: ".95rem",
                   }}
                   onClick={() => setSearch("")}
                 >
                   {r.image && (
                     <img
-                      src={
-                        r.type === "user"
-                          ? avatarUrl(r.image)
-                          : supabase.storage.from("recipe-media").getPublicUrl(r.image).data.publicUrl
-                      }
+                      src={r.type === "user" ? avatarUrl(r.image)! : imgUrl(r.image)!}
                       alt=""
                       style={{
                         width: 32,
                         height: 32,
-                        borderRadius: r.type === "user" ? "50%" : "6px",
+                        borderRadius: r.type === "user" ? "50%" : 8,
                         objectFit: "cover",
+                        border: r.type === "user" ? "2px solid #e8f5e9" : "1px solid #eee",
                       }}
                     />
                   )}
                   <div>
                     <strong>{r.title}</strong>
-                    {r.subtitle && (
-                      <div style={{ fontSize: "0.8rem", color: "#777" }}>{r.subtitle}</div>
-                    )}
+                    {r.subtitle && <div style={{ fontSize: ".8rem", color: "#777" }}>{r.subtitle}</div>}
                   </div>
                 </Link>
               ))}
@@ -229,43 +165,16 @@ export default function App() {
           )}
         </div>
 
-        {/* === Right: Nav === */}
-        <nav style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+        {/* Right: Nav */}
+        <nav style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
           <Link to="/">Feed</Link>
           <Link to="/create">Create</Link>
           <Link to="/plan">Meal Plan</Link>
           <Link to="/me">My Account</Link>
           {userEmail ? (
             <>
-              {profile.avatar_url ? (
-                <img
-                  src={avatarUrl(profile.avatar_url)!}
-                  alt="avatar"
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: "50%",
-                    objectFit: "cover",
-                    border: "2px solid #2e7d32",
-                  }}
-                />
-              ) : (
-                <span style={{ fontSize: "0.9rem", color: "#777" }}>{profile.username ?? "User"}</span>
-              )}
-              <button
-                onClick={signOut}
-                style={{
-                  background: "#2e7d32",
-                  color: "white",
-                  border: "none",
-                  padding: "6px 12px",
-                  borderRadius: "6px",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                }}
-              >
-                Sign out
-              </button>
+              <img className="avatar" src={avatarUrl(profile.avatar_url)} alt="avatar" />
+              <button className="btn" onClick={signOut}>Sign out</button>
             </>
           ) : (
             <Link to="/auth">Sign in</Link>
@@ -273,14 +182,12 @@ export default function App() {
         </nav>
       </header>
 
-      {/* === Main Layout === */}
-    <main className="app-layout">
+      {/* === MAIN === */}
+      <main className="app-layout">
         <div className="main-feed">
-            <Outlet />
+          <Outlet />
         </div>
-    </main>
-
-
+      </main>
 
       <footer>© {new Date().getFullYear()} VegCooking — Share & Explore Recipes</footer>
     </>

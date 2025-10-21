@@ -42,19 +42,11 @@ export default function RecipeDetailPage() {
   }, [id]);
 
   async function fetchRecipe(recipeId: number) {
-    const { data: rec, error } = await supabase
-      .from("recipes")
-      .select("*")
-      .eq("id", recipeId)
-      .single();
+    const { data: rec, error } = await supabase.from("recipes").select("*").eq("id", recipeId).single();
     if (error) return console.error(error);
     setRecipe(rec as Recipe);
 
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("id,username,avatar_url")
-      .eq("id", rec.user_id)
-      .single();
+    const { data: prof } = await supabase.from("profiles").select("id,username,avatar_url").eq("id", rec.user_id).single();
     setAuthor(prof as Profile);
 
     const { data: ings } = await supabase
@@ -64,11 +56,7 @@ export default function RecipeDetailPage() {
       .order("position");
     setIngredients(ings || []);
 
-    const { data: st } = await supabase
-      .from("recipe_steps")
-      .select("id,position,body")
-      .eq("recipe_id", recipeId)
-      .order("position");
+    const { data: st } = await supabase.from("recipe_steps").select("id,position,body").eq("recipe_id", recipeId).order("position");
     setSteps(st || []);
 
     const { data: comm } = await supabase
@@ -76,20 +64,13 @@ export default function RecipeDetailPage() {
       .select("id,body,created_at,profiles(id,username,avatar_url)")
       .eq("recipe_id", recipeId)
       .order("created_at", { ascending: false });
-    setComments(
-      (comm || []).map((c: any) => ({
-        ...c,
-        profiles: Array.isArray(c.profiles) ? c.profiles[0] : c.profiles,
-      }))
-    );
+    setComments((comm || []).map((c: any) => ({ ...c, profiles: Array.isArray(c.profiles) ? c.profiles[0] : c.profiles })));
   }
 
   async function postComment() {
     if (!userId) return alert("Sign in to comment.");
     if (!newComment.trim()) return;
-    const { error } = await supabase
-      .from("comments")
-      .insert({ user_id: userId, recipe_id: recipe?.id, body: newComment });
+    const { error } = await supabase.from("comments").insert({ user_id: userId, recipe_id: recipe?.id, body: newComment });
     if (error) return alert(error.message);
     setNewComment("");
     fetchRecipe(recipe!.id);
@@ -99,7 +80,6 @@ export default function RecipeDetailPage() {
     if (!path) return null;
     return supabase.storage.from("recipe-media").getPublicUrl(path).data.publicUrl;
   }
-
   function avatarUrl(path: string | null) {
     if (!path) return "/default-avatar.png";
     return supabase.storage.from("profile-avatars").getPublicUrl(path).data.publicUrl;
@@ -108,216 +88,103 @@ export default function RecipeDetailPage() {
   if (!recipe) return <p style={{ textAlign: "center" }}>Loading recipe...</p>;
 
   return (
-    <div
-      style={{
-        maxWidth: "700px",
-        margin: "0 auto",
-        background: "#fff",
-        borderRadius: "14px",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
-        overflow: "hidden",
-      }}
-    >
-      {/* === Cover Image === */}
+    <div className="card" style={{ maxWidth: 760, margin: "0 auto", overflow: "hidden" }}>
+      {/* Cover */}
       {recipe.image_url && (
         <img
           src={imgUrl(recipe.image_url)!}
           alt={recipe.title}
-          style={{
-            width: "100%",
-            height: "400px",
-            objectFit: "cover",
-            borderBottom: "1px solid #eee",
-          }}
+          style={{ width: "100%", height: 420, objectFit: "cover", borderBottom: "1px solid #eee" }}
         />
       )}
 
-      {/* === Content === */}
-      <div style={{ padding: "24px" }}>
-        <h2 style={{ marginBottom: "6px", color: "#2e7d32" }}>{recipe.title}</h2>
-        {recipe.caption && (
-          <p style={{ color: "#555", fontSize: "0.95rem", marginBottom: "12px" }}>
-            {recipe.caption}
-          </p>
-        )}
+      <div style={{ padding: 24 }}>
+        <h2 style={{ marginBottom: 6, color: "#2e7d32" }}>{recipe.title}</h2>
+        {recipe.caption && <p style={{ color: "#555", fontSize: ".95rem", marginBottom: 12 }}>{recipe.caption}</p>}
 
-        {/* === Author === */}
+        {/* Author */}
         {author && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              marginBottom: "18px",
-            }}
-          >
-            <img
-              src={avatarUrl(author.avatar_url)!}
-              alt={author.username ?? ""}
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: "50%",
-                objectFit: "cover",
-              }}
-            />
+          <Link to={`/u/${author.id}`} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+            <img src={avatarUrl(author.avatar_url)!} alt={author.username ?? ""} style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover" }} />
             <div>
-              <strong>{author.username ?? "Unknown cook"}</strong>
-              <div style={{ fontSize: "0.85rem", color: "#777" }}>
-                {new Date(recipe.created_at).toLocaleDateString()}
-              </div>
+              <strong className="name">{author.username ?? "Unknown cook"}</strong>
+              <div style={{ fontSize: ".85rem", color: "#777" }}>{new Date(recipe.created_at).toLocaleDateString()}</div>
             </div>
-          </div>
+          </Link>
         )}
 
-        {/* === Tags === */}
+        {/* Tags */}
         {recipe.tags && recipe.tags.length > 0 && (
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "1.5rem" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: "1.25rem" }}>
             {recipe.tags.map((tag) => (
-              <Link
-                key={tag}
-                to={`/?tag=${encodeURIComponent(tag)}`}
-                style={{
-                  background: "#e8f5e9",
-                  color: "#2e7d32",
-                  padding: "4px 10px",
-                  borderRadius: "12px",
-                  fontSize: "0.85rem",
-                }}
-              >
-                #{tag}
-              </Link>
+              <Link key={tag} to={`/?tag=${encodeURIComponent(tag)}`} className="tag">#{tag}</Link>
             ))}
           </div>
         )}
 
-        {/* === Ingredients === */}
-        <section style={{ marginBottom: "1.5rem" }}>
-          <h3 style={{ color: "#2e7d32", marginBottom: "10px" }}>Ingredients</h3>
+        {/* Ingredients */}
+        <section style={{ marginBottom: "1.25rem" }}>
+          <h3 style={{ color: "#2e7d32", marginBottom: 10 }}>Ingredients</h3>
           <ul style={{ listStyle: "none", paddingLeft: 0 }}>
             {ingredients.length > 0 ? (
               ingredients.map((ing) => (
-                <li
-                  key={ing.id}
-                  style={{
-                    padding: "8px 0",
-                    borderBottom: "1px solid #eee",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    fontSize: "0.95rem",
-                  }}
-                >
-                  <span>
-                    {ing.quantity ?? ""} {ing.unit_code ?? ""} {ing.name}
-                  </span>
-                  {ing.notes && (
-                    <span style={{ color: "#777", fontSize: "0.85rem" }}>
-                      {ing.notes}
-                    </span>
-                  )}
+                <li key={ing.id} style={{ padding: "8px 0", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between", fontSize: ".95rem" }}>
+                  <span>{ing.quantity ?? ""} {ing.unit_code ?? ""} {ing.name}</span>
+                  {igNotes(ing.notes)}
                 </li>
               ))
             ) : (
-              <p style={{ color: "#777", fontSize: "0.9rem" }}>
-                No ingredients listed for this recipe.
-              </p>
+              <p style={{ color: "#777", fontSize: ".9rem" }}>No ingredients listed for this recipe.</p>
             )}
           </ul>
         </section>
 
-        {/* === Steps === */}
-        <section style={{ marginBottom: "1.5rem" }}>
-          <h3 style={{ color: "#2e7d32", marginBottom: "10px" }}>Steps</h3>
+        {/* Steps */}
+        <section style={{ marginBottom: "1.25rem" }}>
+          <h3 style={{ color: "#2e7d32", marginBottom: 10 }}>Steps</h3>
           <ol style={{ paddingLeft: "1.2rem" }}>
             {steps.length > 0 ? (
-              steps.map((s) => (
-                <li
-                  key={s.id}
-                  style={{
-                    marginBottom: "0.9rem",
-                    lineHeight: "1.5",
-                    color: "#333",
-                  }}
-                >
-                  {s.body}
-                </li>
-              ))
+              steps.map((s) => <li key={s.id} style={{ marginBottom: ".9rem", lineHeight: 1.5, color: "#333" }}>{s.body}</li>)
             ) : (
-              <p style={{ color: "#777", fontSize: "0.9rem" }}>No steps added yet.</p>
+              <p style={{ color: "#777", fontSize: ".9rem" }}>No steps added yet.</p>
             )}
           </ol>
         </section>
 
-        {/* === Description === */}
+        {/* Description */}
         {recipe.description && (
-          <section style={{ marginBottom: "1.5rem" }}>
-            <h3 style={{ color: "#2e7d32", marginBottom: "10px" }}>Description</h3>
-            <p style={{ color: "#555", lineHeight: "1.6" }}>{recipe.description}</p>
+          <section style={{ marginBottom: "1.25rem" }}>
+            <h3 style={{ color: "#2e7d32", marginBottom: 10 }}>Description</h3>
+            <p style={{ color: "#555", lineHeight: 1.6 }}>{recipe.description}</p>
           </section>
         )}
 
-        {/* === Comments === */}
+        {/* Comments */}
         <section>
-          <h3 style={{ color: "#2e7d32", marginBottom: "10px" }}>Comments</h3>
-          <div
-            style={{
-              display: "flex",
-              gap: "10px",
-              marginBottom: "12px",
-              alignItems: "center",
-            }}
-          >
+          <h3 style={{ color: "#2e7d32", marginBottom: 10 }}>Comments</h3>
+          <div style={{ display: "flex", gap: 10, marginBottom: 12, alignItems: "center" }}>
             <input
               placeholder="Write a comment..."
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
-              style={{
-                flex: 1,
-                padding: "10px",
-                borderRadius: "8px",
-                border: "1px solid #ddd",
-                fontSize: "0.95rem",
-              }}
+              style={{ flex: 1 }}
             />
-            <button className="btn" onClick={postComment}>
-              Post
-            </button>
+            <button className="btn" onClick={postComment}>Post</button>
           </div>
 
-          {comments.length === 0 && (
-            <p style={{ color: "#777" }}>No comments yet. Be the first!</p>
-          )}
+          {comments.length === 0 && <p style={{ color: "#777" }}>No comments yet. Be the first!</p>}
 
           {comments.map((c) => (
-            <div
-              key={c.id}
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: "10px",
-                padding: "10px 0",
-                borderBottom: "1px solid #eee",
-              }}
-            >
-              {c.profiles?.avatar_url && (
-                <img
-                  src={avatarUrl(c.profiles.avatar_url)!}
-                  alt=""
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: "50%",
-                    objectFit: "cover",
-                    marginTop: "2px",
-                  }}
-                />
-              )}
+            <div key={c.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid #eee" }}>
+              <img
+                src={c.profiles?.avatar_url ? avatarUrl(c.profiles.avatar_url)! : "/default-avatar.png"}
+                alt=""
+                style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", marginTop: 2 }}
+              />
               <div>
                 <strong>{c.profiles?.username ?? "Anonymous"}</strong>
-                <p style={{ margin: "4px 0", fontSize: "0.95rem" }}>{c.body}</p>
-                <small style={{ color: "#777" }}>
-                  {new Date(c.created_at).toLocaleString()}
-                </small>
+                <p style={{ margin: "4px 0", fontSize: ".95rem" }}>{c.body}</p>
+                <small style={{ color: "#777" }}>{new Date(c.created_at).toLocaleString()}</small>
               </div>
             </div>
           ))}
@@ -325,4 +192,8 @@ export default function RecipeDetailPage() {
       </div>
     </div>
   );
+
+  function igNotes(notes: string | null) {
+    return notes ? <span style={{ color: "#777", fontSize: ".85rem" }}>{notes}</span> : <span />;
+  }
 }

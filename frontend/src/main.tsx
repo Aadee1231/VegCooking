@@ -5,23 +5,28 @@ import App from './App';
 import AuthPage from './pages/AuthPage';
 import FeedPage from './pages/FeedPage';
 import CreateRecipePage from './pages/CreateRecipePage';
-import MealPlanPage from './pages/MealPlanPage';      
+import MealPlanPage from './pages/MealPlanPage';
 import GroceriesPage from './pages/GroceriesPage';
 import RecipeDetailPage from './pages/RecipeDetailPage';
 import MyAccountPage from './pages/MyAccountPage';
+import UserProfilePage from './pages/UserProfilePage';   // NEW
 import './index.css';
 
 const router = createBrowserRouter([
-  { path: '/', element: <App /> , children: [
-    { index: true, element: <FeedPage /> },
-    { path: 'auth', element: <AuthPage /> },
-    { path: 'create', element: <CreateRecipePage /> },
-    { path: 'plan', element: <MealPlanPage /> },     
-    { path: 'groceries', element: <GroceriesPage /> }, 
-    { path: 'r/:id', element: <RecipeDetailPage /> },
-    { path: 'me', element: <MyAccountPage /> }
-
-  ]},
+  {
+    path: '/',
+    element: <App />,
+    children: [
+      { index: true, element: <FeedPage /> },
+      { path: 'auth', element: <AuthPage /> },
+      { path: 'create', element: <CreateRecipePage /> },
+      { path: 'plan', element: <MealPlanPage /> },
+      { path: 'groceries', element: <GroceriesPage /> },
+      { path: 'r/:id', element: <RecipeDetailPage /> },
+      { path: 'me', element: <MyAccountPage /> },
+      { path: 'u/:id', element: <UserProfilePage /> },   // NEW
+    ],
+  },
 ]);
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

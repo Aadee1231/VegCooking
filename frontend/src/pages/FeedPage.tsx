@@ -86,7 +86,6 @@ export default function FeedPage() {
     if (!path) return null;
     return supabase.storage.from("recipe-media").getPublicUrl(path).data.publicUrl;
   }
-
   function avatarUrl(path: string | null) {
     if (!path) return "/default-avatar.png";
     return supabase.storage.from("profile-avatars").getPublicUrl(path).data.publicUrl;
@@ -97,78 +96,61 @@ export default function FeedPage() {
       {tagFilter && (
         <div style={{ marginBottom: "1rem", textAlign: "center" }}>
           <h3 style={{ color: "#2e7d32" }}>
-            Showing recipes tagged with <span style={{ fontWeight: 600 }}>#{tagFilter}</span>
+            Showing recipes tagged with <span style={{ fontWeight: 700 }}>#{tagFilter}</span>
           </h3>
-          <Link to="/" style={{ fontSize: "0.9rem", color: "#1565c0" }}>
-            Clear filter
-          </Link>
+          <Link to="/" style={{ fontSize: ".9rem", color: "#1565c0" }}>Clear filter</Link>
         </div>
       )}
 
       {items.map((r) => {
         const author = profileMap[r.user_id];
         return (
-          <article key={r.id} className="recipe-card">
-            {/* --- Author Row --- */}
+          <article key={r.id} className="recipe-card fade-in">
+            {/* Author */}
             {author && (
               <div className="author">
-                <img src={avatarUrl(author.avatar_url)!} alt="" />
-                <div>
-                  <span style={{ fontWeight: 600 }}>{author.username ?? "Unknown cook"}</span>
-                  <div style={{ fontSize: "0.8rem", color: "#777" }}>
-                    {new Date(r.created_at).toLocaleDateString()}
+                <Link to={`/u/${author.id}`} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <img src={avatarUrl(author.avatar_url)!} alt="" />
+                  <div>
+                    <span className="name" style={{ fontWeight: 700 }}>
+                      {author.username ?? "Unknown cook"}
+                    </span>
+                    <div style={{ fontSize: ".8rem", color: "#777" }}>
+                      {new Date(r.created_at).toLocaleDateString()}
+                    </div>
                   </div>
-                </div>
+                </Link>
               </div>
             )}
 
-            {/* --- Image --- */}
+            {/* Image */}
             {r.image_url && (
               <img
                 src={imgUrl(r.image_url)!}
                 alt={r.title}
-                style={{
-                  width: "100%",
-                  borderRadius: "10px",
-                  objectFit: "cover",
-                  marginTop: "10px",
-                }}
+                style={{ width: "100%", borderRadius: "12px", objectFit: "cover", marginTop: 10, border: "1px solid #eee" }}
               />
             )}
 
-            {/* --- Title & Caption --- */}
-            <div className="recipe-card-content">
-              <h3>
-                <Link to={`/r/${r.id}`}>{r.title}</Link>
-              </h3>
-              {r.caption && <p style={{ marginTop: "4px", color: "#555" }}>{r.caption}</p>}
+            {/* Title & Caption */}
+            <div className="recipe-card-content" style={{ marginTop: 10 }}>
+              <h3><Link to={`/r/${r.id}`}>{r.title}</Link></h3>
+              {r.caption && <p style={{ marginTop: 6 }}>{r.caption}</p>}
             </div>
 
-            {/* --- Buttons --- */}
-            <div style={{ marginTop: "10px", display: "flex", gap: "10px", alignItems: "center" }}>
+            {/* Buttons */}
+            <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center" }}>
               <button className="btn" onClick={() => toggleLike(r.id)} disabled={liking === r.id}>
-                {liking === r.id ? "..." : "♥"} {r.likes_count}
+                {liking === r.id ? "…" : "♥"} {r.likes_count}
               </button>
-              <button className="btn btn-secondary" onClick={() => addToMyRecipes(r.id)}>
-                ➕ Add
-              </button>
+              <button className="btn btn-secondary" onClick={() => addToMyRecipes(r.id)}>➕ Add</button>
             </div>
 
-            {/* --- Tags --- */}
+            {/* Tags */}
             {r.tags && (
-              <div style={{ marginTop: "10px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {r.tags.map((tag) => (
-                  <Link
-                    key={tag}
-                    to={`/?tag=${encodeURIComponent(tag)}`}
-                    style={{
-                      background: "#e8f5e9",
-                      color: "#2e7d32",
-                      padding: "4px 10px",
-                      borderRadius: "12px",
-                      fontSize: "0.8rem",
-                    }}
-                  >
+                  <Link key={tag} to={`/?tag=${encodeURIComponent(tag)}`} className="tag">
                     #{tag}
                   </Link>
                 ))}
