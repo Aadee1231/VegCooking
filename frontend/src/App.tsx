@@ -17,7 +17,16 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [focused, setFocused] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">(
+    (localStorage.getItem("vc_theme") as "light" | "dark") || "light"
+  );
   const navigate = useNavigate();
+
+  // apply theme to <html>
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("vc_theme", theme);
+  }, [theme]);
 
   // === SESSION + PROFILE ===
   useEffect(() => {
@@ -50,7 +59,6 @@ export default function App() {
       const term = search.trim().toLowerCase();
       const res: SearchResult[] = [];
 
-      // search recipes
       const { data: recipes } = await supabase
         .from("recipes")
         .select("id,title,caption,image_url")
@@ -60,7 +68,6 @@ export default function App() {
         res.push({ id: r.id, type: "recipe", title: r.title, subtitle: r.caption ?? undefined, image: r.image_url })
       );
 
-      // search users
       const { data: users } = await supabase
         .from("profiles")
         .select("id,username,avatar_url")
@@ -70,7 +77,6 @@ export default function App() {
         res.push({ id: u.id, type: "user", title: u.username ?? "Unnamed User", image: u.avatar_url })
       );
 
-      // search tags
       const { data: tags } = await supabase.from("recipes").select("tags").not("tags", "is", null);
       const uniqueTags = new Set<string>();
       (tags ?? []).forEach((r: any) => (r.tags ?? []).forEach((t: string) => t.toLowerCase().includes(term) && uniqueTags.add(t)));
@@ -87,7 +93,7 @@ export default function App() {
   }
 
   function avatarUrl(path: string | null | undefined) {
-    if (!path) return "/default-avatar.png";
+    if (!path) return "/default-avatar.svg";
     return supabase.storage.from("profile-avatars").getPublicUrl(path).data.publicUrl;
   }
   function imgUrl(path: string | null | undefined) {
@@ -97,7 +103,6 @@ export default function App() {
 
   return (
     <>
-      {/* === HEADER === */}
       <header>
         {/* Left: Logo */}
         <Link to="/" style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -151,7 +156,7 @@ export default function App() {
                         height: 32,
                         borderRadius: r.type === "user" ? "50%" : 8,
                         objectFit: "cover",
-                        border: r.type === "user" ? "2px solid #e8f5e9" : "1px solid #eee",
+                        border: r.type === "user" ? "2px solid var(--brand-50)" : "1px solid #eee",
                       }}
                     />
                   )}
@@ -165,8 +170,15 @@ export default function App() {
           )}
         </div>
 
-        {/* Right: Nav */}
+        {/* Right: Nav + Theme toggle */}
         <nav style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+          <button
+            className="btn-secondary"
+            onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
+            title="Toggle theme"
+          >
+            {theme === "light" ? "🌙 Dark" : "☀️ Light"}
+          </button>
           <Link to="/">Feed</Link>
           <Link to="/create">Create</Link>
           <Link to="/plan">Meal Plan</Link>
@@ -182,7 +194,6 @@ export default function App() {
         </nav>
       </header>
 
-      {/* === MAIN === */}
       <main className="app-layout">
         <div className="main-feed">
           <Outlet />

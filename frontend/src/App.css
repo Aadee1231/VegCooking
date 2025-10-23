@@ -189,3 +189,84 @@ footer{
 /* subtle fade-in */
 .fade-in{ animation: fadeIn .25s ease both; }
 @keyframes fadeIn{ from{opacity:0; transform: translateY(4px);} to{opacity:1; transform:none;} }
+
+/* --- MODERN DARK THEME --- */
+:root[data-theme="dark"] {
+  --bg: #0b0c10;
+  --surface: #121417;
+  --surface-2: #181c22;
+  --surface-glass: rgba(255,255,255,0.05);
+  --text: #e5e8ed;
+  --muted: #9ea7b5;
+  --line: #242a33;
+  --brand: #4ade80;          /* emerald green */
+  --brand-700: #22c55e;
+  --brand-50: #04210f;
+  --shadow-sm: 0 3px 8px rgba(0,0,0,0.4);
+  --shadow-md: 0 6px 16px rgba(0,0,0,0.5);
+  --shadow-lg: 0 12px 30px rgba(0,0,0,0.6);
+  color-scheme: dark;
+  transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+:root[data-theme="dark"] body {
+  background: radial-gradient(circle at 20% 30%, #0f1116, #090a0c 90%);
+}
+
+:root[data-theme="dark"] header {
+  backdrop-filter: blur(10px);
+  background: var(--surface-glass);
+  border-bottom: 1px solid var(--line);
+}
+
+:root[data-theme="dark"] .card,
+:root[data-theme="dark"] .recipe-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 0 12px rgba(0,0,0,0.6);
+  transition: transform 0.2s ease, box-shadow 0.3s ease;
+}
+
+:root[data-theme="dark"] .card:hover,
+:root[data-theme="dark"] .recipe-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.8);
+}
+
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] textarea,
+:root[data-theme="dark"] select {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+:root[data-theme="dark"] a {
+  color: var(--brand);
+}
+
+:root[data-theme="dark"] footer {
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
+
+* {
+  transition: background-color 0.3s ease, color 0.3s ease, border 0.3s ease;
+}
+
+#tag-row::-webkit-scrollbar {
+  display: none;
+}
+.fade-in {
+  animation: fadeIn .4s ease both;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+button.active-tag {
+  border-bottom: 3px solid var(--brand);
+  transform: scale(1.05);
+}
