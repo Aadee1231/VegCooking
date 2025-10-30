@@ -20,6 +20,7 @@ const router = createBrowserRouter([
       { index: true, element: <FeedPage /> },
       { path: 'auth', element: <AuthPage /> },
       { path: 'create', element: <CreateRecipePage /> },
+      { path: 'edit/:id', element: <CreateRecipePage /> },
       { path: 'plan', element: <MealPlanPage /> },
       { path: 'groceries', element: <GroceriesPage /> },
       { path: 'r/:id', element: <RecipeDetailPage /> },

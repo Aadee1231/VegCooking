@@ -1,5 +1,5 @@
 // src/pages/FeedPage.tsx
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -29,7 +29,6 @@ const CATEGORIES = [
   { label: "Comfort Food", emoji: "🍝", tag: "Comfort Food" },
 ];
 
-
 export default function FeedPage() {
   const [items, setItems] = useState<Recipe[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
@@ -43,35 +42,32 @@ export default function FeedPage() {
     loadFeed(null);
   }, []);
 
-async function loadFeed(tag: string | null) {
-  setLoading(true);
-  let query = supabase
-    .from("public_recipes_with_stats")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(60);
+  async function loadFeed(tag: string | null) {
+    setLoading(true);
+    let query = supabase
+      .from("public_recipes_with_stats")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(60);
 
-  if (tag && tag !== "ALL") {
-    // filter recipes containing the tag
-    query = query.overlaps("tags", [tag]);
+    if (tag && tag !== "ALL") {
+      query = query.overlaps("tags", [tag]);
+    }
+
+    const { data, error } = await query;
+    if (error) console.error(error);
+    setItems((data ?? []) as Recipe[]);
+    setLoading(false);
+
+    // preload authors
+    const uids = Array.from(new Set((data ?? []).map((r) => r.user_id)));
+    if (uids.length) {
+      const { data: profs } = await supabase.from("profiles").select("id,username,avatar_url").in("id", uids);
+      const map: Record<string, Profile> = {};
+      (profs ?? []).forEach((p) => (map[p.id] = p as Profile));
+      setProfileMap(map);
+    }
   }
-
-  const { data, error } = await query;
-  if (error) console.error(error);
-  setItems((data ?? []) as Recipe[]);
-  setLoading(false);
-
-  // preload authors
-  const uids = Array.from(new Set((data ?? []).map((r) => r.user_id)));
-  if (uids.length) {
-    const { data: profs } = await supabase.from("profiles").select("id,username,avatar_url").in("id", uids);
-    const map: Record<string, Profile> = {};
-    (profs ?? []).forEach((p) => (map[p.id] = p as Profile));
-    setProfileMap(map);
-  }
-}
-
-
 
   async function toggleLike(recipeId: number) {
     if (!userId) return alert("Sign in to like");
@@ -86,8 +82,9 @@ async function loadFeed(tag: string | null) {
     }
   }
 
-  async function addToMyRecipes(recipeId: number) {
+  async function addToMyRecipes(recipeId: number, ownerId: string) {
     if (!userId) return alert("Sign in to add");
+    if (ownerId === userId) return alert("You can’t add your own recipe!");
     const { error } = await supabase.from("user_added_recipes").insert({ user_id: userId, recipe_id: recipeId });
     if (error && (error as any).code !== "23505") alert(error.message);
     else if (!error) alert("Recipe added!");
@@ -98,7 +95,6 @@ async function loadFeed(tag: string | null) {
   const imgUrl = (p: string | null) =>
     p ? supabase.storage.from("recipe-media").getPublicUrl(p).data.publicUrl : null;
 
-  // for category scroll
   function scrollRow(dir: "left" | "right") {
     const el = document.getElementById("tag-row");
     if (el) el.scrollBy({ left: dir === "left" ? -200 : 200, behavior: "smooth" });
@@ -162,6 +158,7 @@ async function loadFeed(tag: string | null) {
       ) : (
         items.map((r) => {
           const author = profileMap[r.user_id];
+          const isOwn = r.user_id === userId;
           return (
             <article
               key={r.id}
@@ -175,17 +172,19 @@ async function loadFeed(tag: string | null) {
                 border: "1px solid #eee",
               }}
             >
-              {/* Header */}
+              {/* Header (avatar + name now linkable to profile) */}
               {author && (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Link to={`/u/${author.id}`} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <img
                       src={avatarUrl(author.avatar_url)}
                       alt=""
                       style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover" }}
                     />
-                    <strong>{author.username}</strong>
-                  </div>
+                    <strong style={{ textDecoration: "underline", textUnderlineOffset: 2 }}>
+                      {author.username}
+                    </strong>
+                  </Link>
                   <small style={{ color: "#777" }}>{new Date(r.created_at).toLocaleDateString()}</small>
                 </div>
               )}
@@ -215,9 +214,11 @@ async function loadFeed(tag: string | null) {
                 <button className="btn" onClick={() => toggleLike(r.id)} disabled={liking === r.id}>
                   {liking === r.id ? "…" : "♥"} {r.likes_count}
                 </button>
-                <button className="btn btn-secondary" onClick={() => addToMyRecipes(r.id)}>
-                  ➕ Add
-                </button>
+                {!isOwn && (
+                  <button className="btn btn-secondary" onClick={() => addToMyRecipes(r.id, r.user_id)}>
+                    ➕ Add
+                  </button>
+                )}
               </div>
 
               {r.tags && (
