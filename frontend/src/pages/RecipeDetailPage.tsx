@@ -31,14 +31,16 @@ function Toast({ msg }: { msg: string }) {
     <div
       style={{
         position: "fixed",
-        bottom: "20px",
-        right: "20px",
+        bottom: "30px",
+        left: "50%",
+        transform: "translateX(-50%)",
         background: "var(--brand)",
         color: "#fff",
-        padding: "10px 16px",
-        borderRadius: "10px",
-        boxShadow: "0 2px 10px rgba(0,0,0,.2)",
-        animation: "fadeIn .3s ease both",
+        padding: "14px 22px",
+        borderRadius: "12px",
+        boxShadow: "0 4px 16px rgba(0,0,0,.3)",
+        fontWeight: 600,
+        animation: "fadeIn .3s ease, fadeOut .3s ease 2.3s",
         zIndex: 9999,
       }}
     >
@@ -46,6 +48,7 @@ function Toast({ msg }: { msg: string }) {
     </div>
   );
 }
+
 
 export default function RecipeDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -203,7 +206,9 @@ export default function RecipeDetailPage() {
     if (!body) return;
     setPosting(true);
     try {
-      await supabase.from("comments").insert({ recipe_id: Number(id), user_id: currentUserId, body });
+      await supabase.from("comments").insert({ 
+        recipe_id: Number(id), user_id: currentUserId, body 
+      });
       setNewComment("");
       await loadComments();
       showToast("Comment posted!");

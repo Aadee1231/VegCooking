@@ -20,16 +20,11 @@ type Line = {
 };
 const UNITS = ["g", "kg", "ml", "l", "tsp", "tbsp", "cup", "pc"];
 const TAG_OPTIONS = [
-  "Vegan",
-  "Vegetarian",
-  "Comfort Food",
-  "Healthy",
-  "Dessert",
-  "Spicy",
-  "Quick",
-  "Breakfast",
-  "Dinner",
+  "Vegan", "Vegetarian", "Gluten-Free", "Dairy-Free",
+  "Healthy", "Dessert", "Comfort Food",
+  "Quick", "Breakfast", "Dinner", "Spicy"
 ];
+
 
 /* ---------- Spreadsheet Import ---------- */
 async function importSpreadsheet(file: File, userId: string) {
@@ -239,6 +234,9 @@ export default function CreateRecipePage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
+  const [prepTime, setPrepTime] = useState("");
+  const [cookTime, setCookTime] = useState("");
+  const [difficulty, setDifficulty] = useState("");
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
@@ -288,6 +286,19 @@ export default function CreateRecipePage() {
   }
 
   const toggleTag = (t: string) => setTags((p) => (p.includes(t) ? p.filter((x) => x !== t) : [...p, t]));
+  
+  <div className="create-grid">
+    <input placeholder="Prep Time (e.g., 20 min)" value={prepTime} onChange={(e) => setPrepTime(e.target.value)} />
+    <input placeholder="Cook Time (e.g., 45 min)" value={cookTime} onChange={(e) => setCookTime(e.target.value)} />
+    <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
+        <option value="">Difficulty</option>
+        <option>Easy</option>
+        <option>Medium</option>
+        <option>Hard</option>
+    </select>
+  </div>
+
+
 
   async function uploadCover(uid: string, rid: number) {
     if (!cover) return null;
@@ -310,12 +321,13 @@ export default function CreateRecipePage() {
         const { error } = await supabase
           .from("recipes")
           .update({
-            title,
-            caption,
-            description,
+            title, caption, description,
             servings: servings === "" ? null : Number(servings),
             is_public: isPublic,
             tags,
+            prep_time: prepTime || null,
+            cook_time: cookTime || null,
+            difficulty: difficulty || null
           })
           .eq("id", recipeId);
         if (error) throw error;

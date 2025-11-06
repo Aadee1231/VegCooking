@@ -18,6 +18,7 @@ type Recipe = {
 type Profile = { id: string; username: string | null; avatar_url: string | null };
 
 // DoorDash-style “tag” categories
+// DoorDash-style “tag” categories
 const CATEGORIES = [
   { label: "All", emoji: "🍽️", tag: "ALL" },
   { label: "Vegan", emoji: "🥦", tag: "Vegan" },
@@ -27,7 +28,12 @@ const CATEGORIES = [
   { label: "Healthy", emoji: "🍎", tag: "Healthy" },
   { label: "Dessert", emoji: "🍰", tag: "Dessert" },
   { label: "Comfort Food", emoji: "🍝", tag: "Comfort Food" },
+  { label: "Quick", emoji: "⚡", tag: "Quick" },
+  { label: "Breakfast", emoji: "🥐", tag: "Breakfast" },
+  { label: "Dinner", emoji: "🍛", tag: "Dinner" },
+  { label: "Spicy", emoji: "🌶️", tag: "Spicy" },
 ];
+
 
 export default function FeedPage() {
   const [items, setItems] = useState<Recipe[]>([]);

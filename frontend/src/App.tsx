@@ -2,6 +2,8 @@ import { Outlet, Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import "./App.css";
+import { useLocation } from "react-router-dom";
+
 
 type SearchResult = {
   id: number | string;
@@ -15,12 +17,17 @@ export default function App() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [profile, setProfile] = useState<{ username?: string | null; avatar_url?: string | null }>({});
   const [search, setSearch] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [results, setResults] = useState<any[]>([]);
   const [focused, setFocused] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">(
     (localStorage.getItem("vc_theme") as "light" | "dark") || "light"
   );
+
   const navigate = useNavigate();
+  const location = useLocation(); 
+
+  const protectedRoutes = ["/", "/create", "/plan", "/me"];
+  const needsAuth = protectedRoutes.includes(location.pathname);
 
   // apply theme to <html>
   useEffect(() => {
@@ -196,7 +203,18 @@ export default function App() {
 
       <main className="app-layout">
         <div className="main-feed">
-          <Outlet />
+        {needsAuth && !userEmail ? (
+            <div style={{ textAlign: "center", padding: "4rem 1rem" }}>
+            <h2 style={{ color: "var(--brand)", marginBottom: 10 }}>
+                Sign in or create an account to access this feature
+            </h2>
+            <Link to="/auth" className="btn">
+                Go to Sign In
+            </Link>
+            </div>
+        ) : (
+            <Outlet />
+        )}
         </div>
       </main>
 

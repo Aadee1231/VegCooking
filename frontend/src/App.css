@@ -270,3 +270,8 @@ button.active-tag {
   border-bottom: 3px solid var(--brand);
   transform: scale(1.05);
 }
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; transform: translateY(10px); }
+}
