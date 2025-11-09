@@ -18,7 +18,6 @@ type Recipe = {
 type Profile = { id: string; username: string | null; avatar_url: string | null };
 
 // DoorDash-style “tag” categories
-// DoorDash-style “tag” categories
 const CATEGORIES = [
   { label: "All", emoji: "🍽️", tag: "ALL" },
   { label: "Vegan", emoji: "🥦", tag: "Vegan" },
@@ -218,14 +217,16 @@ export default function FeedPage() {
 
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <button className="btn" onClick={() => toggleLike(r.id)} disabled={liking === r.id}>
-                  {liking === r.id ? "…" : "♥"} {r.likes_count}
+                    {liking === r.id ? "…" : "♥"} {r.likes_count}
                 </button>
                 {!isOwn && (
-                  <button className="btn btn-secondary" onClick={() => addToMyRecipes(r.id, r.user_id)}>
+                    <button className="btn btn-secondary" onClick={() => addToMyRecipes(r.id, r.user_id)}>
                     ➕ Add
-                  </button>
+                    </button>
                 )}
+                <span style={{ color: "#777", fontSize: "1.2rem" }}>💬 {r.comments_count}</span>
               </div>
+
 
               {r.tags && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
