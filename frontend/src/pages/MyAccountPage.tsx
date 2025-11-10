@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { Link, useNavigate } from "react-router-dom";
+import { Toast } from "../components/Toast";
+
 
 type Profile = {
   id: string;
@@ -45,6 +47,9 @@ export default function MyAccountPage() {
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState(""); // 🔎 search box
   const navigate = useNavigate();
+  const [toast, setToast] = useState("");
+
+
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -53,6 +58,11 @@ export default function MyAccountPage() {
       if (id) fetchProfile(id);
     });
   }, []);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2500);
+  }
 
   async function fetchProfile(id: string) {
     const { data: p } = await supabase.from("profiles").select("*").eq("id", id).single();
@@ -86,6 +96,7 @@ export default function MyAccountPage() {
     const path = `${userId}/avatar_${Date.now()}.jpg`;
     await supabase.storage.from("profile-avatars").upload(path, f, { upsert: true });
     await supabase.from("profiles").update({ avatar_url: path }).eq("id", userId);
+    showToast("Avatar uploaded!");
     fetchProfile(userId);
   }
 
@@ -93,6 +104,7 @@ export default function MyAccountPage() {
     if (!userId) return;
     setSaving(true);
     await supabase.from("profiles").update(edit).eq("id", userId);
+    showToast("Profile updated!");
     setSaving(false);
     fetchProfile(userId);
   }
@@ -107,15 +119,16 @@ export default function MyAccountPage() {
   }
 
   async function deleteRecipe(id: number) {
-    if (!confirm("Are you sure you want to delete this recipe?")) return;
     await supabase.from("recipes").delete().eq("id", id);
     setOwn((prev) => prev.filter((r) => r.id !== id));
+    showToast("Recipe deleted!");
   }
 
   async function removeAddedRecipe(recipeId: number) {
     if (!userId) return;
     await supabase.from("user_added_recipes").delete().eq("user_id", userId).eq("recipe_id", recipeId);
     setAdded((prev) => prev.filter((r) => r.id !== recipeId));
+    showToast("Recipe removed!");
   }
 
   const active = tab === "own" ? own : added;
@@ -125,6 +138,7 @@ export default function MyAccountPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+      {toast && <Toast msg={toast} />}  
       {!profile ? (
         <p>Loading...</p>
       ) : (

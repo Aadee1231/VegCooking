@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import { Toast } from "../components/Toast";
+
+
 
 /* ---------- Types ---------- */
 type Recipe = {
@@ -12,6 +15,10 @@ type Recipe = {
   created_at: string;
   user_id: string;
   tags?: string[] | null;
+
+  prep_time?: string | null;
+  cook_time?: string | null;
+  difficulty?: string | null;
 };
 
 type Profile = { id: string; username: string | null; avatar_url: string | null };
@@ -25,29 +32,7 @@ type CommentRow = {
   profiles?: { username: string | null; avatar_url: string | null } | null;
 };
 
-/* ---------- Toast component ---------- */
-function Toast({ msg }: { msg: string }) {
-  return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: "30px",
-        left: "50%",
-        transform: "translateX(-50%)",
-        background: "var(--brand)",
-        color: "#fff",
-        padding: "14px 22px",
-        borderRadius: "12px",
-        boxShadow: "0 4px 16px rgba(0,0,0,.3)",
-        fontWeight: 600,
-        animation: "fadeIn .3s ease, fadeOut .3s ease 2.3s",
-        zIndex: 9999,
-      }}
-    >
-      {msg}
-    </div>
-  );
-}
+
 
 
 export default function RecipeDetailPage() {
@@ -70,10 +55,15 @@ export default function RecipeDetailPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [newComment, setNewComment] = useState("");
 
+  const [commentLikes, setCommentLikes] = useState<Record<number, number>>({});
+
   const avatarUrl = (p: string | null) =>
     p ? supabase.storage.from("profile-avatars").getPublicUrl(p).data.publicUrl : "/default-avatar.svg";
   const imgUrl = (p: string | null) =>
     p ? supabase.storage.from("recipe-media").getPublicUrl(p).data.publicUrl : null;
+
+
+
 
   /* ---------- Init ---------- */
   useEffect(() => {
@@ -161,7 +151,33 @@ export default function RecipeDetailPage() {
       .order("created_at", { ascending: false });
     setComments((data ?? []) as any);
     setCommentCount(count ?? 0);
+
+    const { data: likesData } = await supabase.from("comment_likes").select("*");
+    const likeMap: Record<number, number> = {};
+    (likesData ?? []).forEach(l => likeMap[l.comment_id] = (likeMap[l.comment_id] || 0) + 1);
+    setCommentLikes(likeMap);
   }
+
+  /* ---------- Comment actions ---------- */
+  async function toggleCommentLike(commentId: number) {
+    if (!currentUserId) return showToast("Sign in first!");
+    const { error } = await supabase
+      .from("comment_likes")
+      .insert({ comment_id: commentId, user_id: currentUserId });
+    if (error) {
+      await supabase.from("comment_likes").delete().eq("comment_id", commentId).eq("user_id", currentUserId);
+      setCommentLikes((m) => ({ ...m, [commentId]: Math.max(0, (m[commentId] || 1) - 1) }));
+    } else {
+      setCommentLikes((m) => ({ ...m, [commentId]: (m[commentId] || 0) + 1 }));
+    }
+  }
+
+  async function deleteComment(commentId: number) {
+    await supabase.from("comments").delete().eq("id", commentId);
+    setComments((prev) => prev.filter((x) => x.id !== commentId));
+    showToast("Comment deleted");
+  }
+
 
   /* ---------- Actions ---------- */
   async function likeRecipe() {
@@ -306,6 +322,39 @@ export default function RecipeDetailPage() {
         </div>
       )}
 
+      {/* ✅ New recipe info section */}
+      {(recipe.prep_time || recipe.cook_time || recipe.difficulty) && (
+        <div
+          style={{
+            background: "rgba(0,0,0,0.03)",
+            padding: "12px 16px",
+            borderRadius: 10,
+            marginBottom: "1.2rem",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "12px",
+            fontSize: ".95rem",
+          }}
+        >
+          {recipe.prep_time && <span>⏱ Prep: {recipe.prep_time}</span>}
+          {recipe.cook_time && <span>🔥 Cook: {recipe.cook_time}</span>}
+          {(recipe.prep_time || recipe.cook_time) && (
+            <span>
+              🕒 Total:{" "}
+              {(() => {
+                const extract = (s: string) =>
+                  parseInt(s.replace(/[^0-9]/g, "")) || 0;
+                const p = extract(recipe.prep_time || "0");
+                const c = extract(recipe.cook_time || "0");
+                return `${p + c} min`;
+              })()}
+            </span>
+          )}
+          {recipe.difficulty && <span>💪 Difficulty: {recipe.difficulty}</span>}
+        </div>
+      )}
+
+
       {/* Description */}
       {recipe.description && (
         <p style={{ marginBottom: "1.5rem", lineHeight: 1.6 }}>{recipe.description}</p>
@@ -346,49 +395,6 @@ export default function RecipeDetailPage() {
         </ol>
       </section>
 
-      {/* Comments */}
-      <section className="card" style={{ padding: 16, borderRadius: 14 }}>
-        <h3 style={{ color: "var(--brand)", marginBottom: 10 }}>
-          Comments ({commentCount})
-        </h3>
-        {currentUserId && (
-          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            <input
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Share your thoughts…"
-              style={{ flex: 1 }}
-            />
-            <button className="btn" onClick={postComment} disabled={posting}>
-              {posting ? "…" : "Post"}
-            </button>
-          </div>
-        )}
-        {comments.length === 0 ? (
-          <p style={{ color: "#777" }}>No comments yet.</p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {comments.map((c) => (
-              <div key={c.id} style={{ display: "flex", gap: 10, borderBottom: "1px solid #eee", paddingBottom: 8 }}>
-                <img
-                  src={avatarUrl(c.profiles?.avatar_url ?? null)}
-                  alt=""
-                  style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover" }}
-                />
-                <div>
-                  <div style={{ fontWeight: 600 }}>
-                    {c.profiles?.username ?? "User"}{" "}
-                    <span style={{ color: "#999", fontWeight: 400, fontSize: ".85rem" }}>
-                      {new Date(c.created_at).toLocaleString()}
-                    </span>
-                  </div>
-                  <div>{c.body}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
 
       {/* Similar */}
       {similar.length > 0 && (
@@ -423,6 +429,74 @@ export default function RecipeDetailPage() {
           </div>
         </section>
       )}
+
+      {/* Comments section */}
+      <section className="card" style={{ padding: 16, borderRadius: 14 }}>
+        <h3 style={{ color: "var(--brand)", marginBottom: 10 }}>Comments ({commentCount})</h3>
+        {currentUserId && (
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <input
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Share your thoughts…"
+              style={{ flex: 1 }}
+            />
+            <button className="btn" onClick={postComment} disabled={posting}>
+              {posting ? "…" : "Post"}
+            </button>
+          </div>
+        )}
+        {comments.length === 0 ? (
+          <p style={{ color: "#777" }}>No comments yet.</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {comments.map((c) => (
+              <div
+                key={c.id}
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  borderBottom: "1px solid #eee",
+                  paddingBottom: 8,
+                }}
+              >
+                <img
+                  src={avatarUrl(c.profiles?.avatar_url ?? null)}
+                  alt=""
+                  style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover" }}
+                />
+                <div>
+                  <div style={{ fontWeight: 600 }}>
+                    {c.profiles?.username ?? "User"}{" "}
+                    <span style={{ color: "#999", fontWeight: 400, fontSize: ".85rem" }}>
+                      {new Date(c.created_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}
+                    </span>
+                  </div>
+                  <div>{c.body}</div>
+                  <div style={{ marginTop: 4, display: "flex", gap: 10 }}>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ fontSize: ".8rem", padding: "4px 8px" }}
+                      onClick={() => toggleCommentLike(c.id)}
+                    >
+                      ♥ {commentLikes[c.id] ?? 0}
+                    </button>
+                    {c.user_id === currentUserId && (
+                      <button
+                        className="btn-danger"
+                        style={{ fontSize: ".8rem", padding: "4px 8px" }}
+                        onClick={() => deleteComment(c.id)}
+                      >
+                        🗑 Delete
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

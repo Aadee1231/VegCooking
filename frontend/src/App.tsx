@@ -1,9 +1,7 @@
-import { Outlet, Link, useNavigate } from "react-router-dom";
+import { Outlet, Link, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import "./App.css";
-import { useLocation } from "react-router-dom";
-
 
 type SearchResult = {
   id: number | string;
@@ -24,18 +22,17 @@ export default function App() {
   );
 
   const navigate = useNavigate();
-  const location = useLocation(); 
+  const location = useLocation();
+  const protectedRoutes = ["/create", "/plan", "/me", "/r", "/u"];
+  const needsAuth = protectedRoutes.some((r) => location.pathname.startsWith(r));
 
-  const protectedRoutes = ["/", "/create", "/plan", "/me"];
-  const needsAuth = protectedRoutes.includes(location.pathname);
-
-  // apply theme to <html>
+  // Apply theme
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("vc_theme", theme);
   }, [theme]);
 
-  // === SESSION + PROFILE ===
+  // Session + Profile
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
       const email = data.session?.user?.email ?? null;
@@ -59,40 +56,63 @@ export default function App() {
   // === SEARCH FUNCTIONALITY ===
   useEffect(() => {
     if (!search.trim()) {
-      setResults([]);
-      return;
+        setResults([]);
+        return;
     }
-    const timer = setTimeout(async () => {
-      const term = search.trim().toLowerCase();
-      const res: SearchResult[] = [];
 
-      const { data: recipes } = await supabase
+    const timer = setTimeout(async () => {
+        const term = search.trim().toLowerCase();
+        const res: SearchResult[] = [];
+
+        // Search recipes by title
+        const { data: recipes } = await supabase
         .from("recipes")
-        .select("id,title,caption,image_url")
+        .select("id, title, caption, image_url")
         .ilike("title", `%${term}%`)
         .limit(3);
-      (recipes ?? []).forEach((r) =>
-        res.push({ id: r.id, type: "recipe", title: r.title, subtitle: r.caption ?? undefined, image: r.image_url })
-      );
+        (recipes ?? []).forEach((r) =>
+        res.push({
+            id: r.id,
+            type: "recipe",
+            title: r.title,
+            subtitle: r.caption ?? undefined,
+            image: r.image_url,
+        })
+        );
 
-      const { data: users } = await supabase
+        // Search users by username
+        const { data: users } = await supabase
         .from("profiles")
-        .select("id,username,avatar_url")
+        .select("id, username, avatar_url")
         .ilike("username", `%${term}%`)
         .limit(3);
-      (users ?? []).forEach((u) =>
-        res.push({ id: u.id, type: "user", title: u.username ?? "Unnamed User", image: u.avatar_url })
-      );
+        (users ?? []).forEach((u) =>
+        res.push({
+            id: u.id,
+            type: "user",
+            title: u.username ?? "Unnamed User",
+            image: u.avatar_url,
+        })
+        );
 
-      const { data: tags } = await supabase.from("recipes").select("tags").not("tags", "is", null);
-      const uniqueTags = new Set<string>();
-      (tags ?? []).forEach((r: any) => (r.tags ?? []).forEach((t: string) => t.toLowerCase().includes(term) && uniqueTags.add(t)));
-      Array.from(uniqueTags).slice(0, 5).forEach((tag) => res.push({ id: tag, type: "tag", title: `#${tag}` }));
+        // Search tags (from recipe table)
+        const { data: tags } = await supabase.from("recipes").select("tags").not("tags", "is", null);
+        const uniqueTags = new Set<string>();
+        (tags ?? []).forEach((r: any) =>
+        (r.tags ?? []).forEach((t: string) => {
+            if (t.toLowerCase().includes(term)) uniqueTags.add(t);
+        })
+        );
+        Array.from(uniqueTags)
+        .slice(0, 5)
+        .forEach((tag) => res.push({ id: tag, type: "tag", title: `#${tag}` }));
 
-      setResults(res);
+        setResults(res);
     }, 250);
+
     return () => clearTimeout(timer);
   }, [search]);
+
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -103,6 +123,7 @@ export default function App() {
     if (!path) return "/default-avatar.svg";
     return supabase.storage.from("profile-avatars").getPublicUrl(path).data.publicUrl;
   }
+
   function imgUrl(path: string | null | undefined) {
     if (!path) return null;
     return supabase.storage.from("recipe-media").getPublicUrl(path).data.publicUrl;
@@ -111,12 +132,11 @@ export default function App() {
   return (
     <>
       <header>
-        {/* Left: Logo */}
         <Link to="/" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <h1 className="brand">VegCooking</h1>
         </Link>
 
-        {/* Center: Search */}
+        {/* Search Bar */}
         <div style={{ position: "relative", flex: "0 1 480px" }}>
           <input
             type="text"
@@ -135,7 +155,6 @@ export default function App() {
                 top: "105%",
                 left: 0,
                 right: 0,
-                overflow: "hidden",
                 zIndex: 200,
                 borderRadius: 12,
               }}
@@ -150,7 +169,6 @@ export default function App() {
                     gap: 12,
                     padding: "10px 12px",
                     borderBottom: "1px solid #eaeaea",
-                    fontSize: ".95rem",
                   }}
                   onClick={() => setSearch("")}
                 >
@@ -163,7 +181,6 @@ export default function App() {
                         height: 32,
                         borderRadius: r.type === "user" ? "50%" : 8,
                         objectFit: "cover",
-                        border: r.type === "user" ? "2px solid var(--brand-50)" : "1px solid #eee",
                       }}
                     />
                   )}
@@ -177,13 +194,8 @@ export default function App() {
           )}
         </div>
 
-        {/* Right: Nav + Theme toggle */}
         <nav style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-          <button
-            className="btn-secondary"
-            onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
-            title="Toggle theme"
-          >
+          <button className="btn-secondary" onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}>
             {theme === "light" ? "🌙 Dark" : "☀️ Light"}
           </button>
           <Link to="/">Feed</Link>
@@ -203,18 +215,18 @@ export default function App() {
 
       <main className="app-layout">
         <div className="main-feed">
-        {needsAuth && !userEmail ? (
+          {needsAuth && !userEmail ? (
             <div style={{ textAlign: "center", padding: "4rem 1rem" }}>
-            <h2 style={{ color: "var(--brand)", marginBottom: 10 }}>
+              <h2 style={{ color: "var(--brand)", marginBottom: 10 }}>
                 Sign in or create an account to access this feature
-            </h2>
-            <Link to="/auth" className="btn">
+              </h2>
+              <Link to="/auth" className="btn">
                 Go to Sign In
-            </Link>
+              </Link>
             </div>
-        ) : (
+          ) : (
             <Outlet />
-        )}
+          )}
         </div>
       </main>
 

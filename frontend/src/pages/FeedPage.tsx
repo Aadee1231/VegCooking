@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Toast } from "../components/Toast";
+
 
 type Recipe = {
   id: number;
@@ -14,7 +16,13 @@ type Recipe = {
   comments_count: number;
   user_id: string;
   tags?: string[] | null;
+
+  // ✅ Added fields
+  prep_time?: string | null;
+  cook_time?: string | null;
+  difficulty?: string | null;
 };
+
 type Profile = { id: string; username: string | null; avatar_url: string | null };
 
 // DoorDash-style “tag” categories
@@ -33,7 +41,6 @@ const CATEGORIES = [
   { label: "Spicy", emoji: "🌶️", tag: "Spicy" },
 ];
 
-
 export default function FeedPage() {
   const [items, setItems] = useState<Recipe[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
@@ -41,6 +48,13 @@ export default function FeedPage() {
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [liking, setLiking] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<string>("");
+
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2500);
+  }
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
@@ -51,7 +65,7 @@ export default function FeedPage() {
     setLoading(true);
     let query = supabase
       .from("public_recipes_with_stats")
-      .select("*")
+      .select("*, prep_time, cook_time, difficulty") // ✅ include new columns
       .order("created_at", { ascending: false })
       .limit(60);
 
@@ -75,11 +89,16 @@ export default function FeedPage() {
   }
 
   async function toggleLike(recipeId: number) {
-    if (!userId) return alert("Sign in to like");
+    if (!userId) return showToast("Sign in to like");
     setLiking(recipeId);
     try {
       const { error } = await supabase.from("likes").insert({ user_id: userId, recipe_id: recipeId });
-      if (error) await supabase.from("likes").delete().eq("user_id", userId).eq("recipe_id", recipeId);
+      if (error) {
+        await supabase.from("likes").delete().eq("user_id", userId).eq("recipe_id", recipeId);
+        showToast("Like removed ❤️‍🩹");
+      } else {
+        showToast("Liked ❤️");
+      }
       const { data } = await supabase.from("public_recipes_with_stats").select("*").eq("id", recipeId).single();
       setItems((prev) => prev.map((r) => (r.id === recipeId ? (data as Recipe) : r)));
     } finally {
@@ -88,11 +107,12 @@ export default function FeedPage() {
   }
 
   async function addToMyRecipes(recipeId: number, ownerId: string) {
-    if (!userId) return alert("Sign in to add");
-    if (ownerId === userId) return alert("You can’t add your own recipe!");
+    if (!userId) return showToast("Sign in to add");
+    if (ownerId === userId) return showToast("You can't add your own recipe!");
     const { error } = await supabase.from("user_added_recipes").insert({ user_id: userId, recipe_id: recipeId });
-    if (error && (error as any).code !== "23505") alert(error.message);
-    else if (!error) alert("Recipe added!");
+    if (error && (error as any).code !== "23505") showToast("Error adding recipe");
+    else if (!error) showToast("Recipe added!");
+    else showToast("Already added.");
   }
 
   const avatarUrl = (p: string | null) =>
@@ -107,6 +127,7 @@ export default function FeedPage() {
 
   return (
     <div className="fade-in" style={{ padding: "1rem 0" }}>
+      {toast && <Toast msg={toast} />}
       {/* ---- CATEGORY SCROLLER ---- */}
       <div style={{ position: "relative", margin: "0 auto 1rem auto", maxWidth: 1000 }}>
         <button
@@ -215,18 +236,35 @@ export default function FeedPage() {
               </h3>
               {r.caption && <p style={{ color: "#555" }}>{r.caption}</p>}
 
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {/* ✅ Added recipe info below caption */}
+              {(r.prep_time || r.cook_time || r.difficulty) && (
+                <div style={{ fontSize: ".9rem", color: "#555", marginTop: 4 }}>
+                  {(r.prep_time || r.cook_time) && (
+                    <span>
+                      ⏱{" "}
+                      {(() => {
+                        const extract = (s: string) => parseInt(s.replace(/[^0-9]/g, "")) || 0;
+                        const p = extract(r.prep_time || "0");
+                        const c = extract(r.cook_time || "0");
+                        return `${p + c} min total`;
+                      })()}
+                    </span>
+                  )}
+                  {r.difficulty && <span style={{ marginLeft: 8 }}>💪 {r.difficulty}</span>}
+                </div>
+              )}
+
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
                 <button className="btn" onClick={() => toggleLike(r.id)} disabled={liking === r.id}>
-                    {liking === r.id ? "…" : "♥"} {r.likes_count}
+                  {liking === r.id ? "…" : "♥"} {r.likes_count}
                 </button>
                 {!isOwn && (
-                    <button className="btn btn-secondary" onClick={() => addToMyRecipes(r.id, r.user_id)}>
+                  <button className="btn btn-secondary" onClick={() => addToMyRecipes(r.id, r.user_id)}>
                     ➕ Add
-                    </button>
+                  </button>
                 )}
                 <span style={{ color: "#777", fontSize: "1.2rem" }}>💬 {r.comments_count}</span>
               </div>
-
 
               {r.tags && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>

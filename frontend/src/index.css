@@ -1,5 +1,18 @@
-/* keep minimal reset, App.css holds most styles now */
-* { box-sizing: border-box; }
-body { margin: 0; }
-a { text-decoration: none; }
-button { cursor: pointer; }
+@keyframes toast-fade {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 20px);
+  }
+  10% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  90% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, 20px);
+  }
+}
