@@ -2,9 +2,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Heart } from "lucide-react";
 import { Toast } from "../components/Toast";
-
 
 type Recipe = {
   id: number;
@@ -16,8 +15,6 @@ type Recipe = {
   comments_count: number;
   user_id: string;
   tags?: string[] | null;
-
-  // ✅ Added fields
   prep_time?: string | null;
   cook_time?: string | null;
   difficulty?: string | null;
@@ -25,7 +22,6 @@ type Recipe = {
 
 type Profile = { id: string; username: string | null; avatar_url: string | null };
 
-// DoorDash-style “tag” categories
 const CATEGORIES = [
   { label: "All", emoji: "🍽️", tag: "ALL" },
   { label: "Vegan", emoji: "🥦", tag: "Vegan" },
@@ -50,7 +46,6 @@ export default function FeedPage() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string>("");
 
-
   function showToast(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(""), 2500);
@@ -65,23 +60,23 @@ export default function FeedPage() {
     setLoading(true);
     let query = supabase
       .from("public_recipes_with_stats")
-      .select("*, prep_time, cook_time, difficulty") // ✅ include new columns
+      .select("*, prep_time, cook_time, difficulty")
       .order("created_at", { ascending: false })
       .limit(60);
 
-    if (tag && tag !== "ALL") {
-      query = query.overlaps("tags", [tag]);
-    }
+    if (tag && tag !== "ALL") query = query.overlaps("tags", [tag]);
 
     const { data, error } = await query;
     if (error) console.error(error);
     setItems((data ?? []) as Recipe[]);
     setLoading(false);
 
-    // preload authors
     const uids = Array.from(new Set((data ?? []).map((r) => r.user_id)));
     if (uids.length) {
-      const { data: profs } = await supabase.from("profiles").select("id,username,avatar_url").in("id", uids);
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id,username,avatar_url")
+        .in("id", uids);
       const map: Record<string, Profile> = {};
       (profs ?? []).forEach((p) => (map[p.id] = p as Profile));
       setProfileMap(map);
@@ -92,15 +87,27 @@ export default function FeedPage() {
     if (!userId) return showToast("Sign in to like");
     setLiking(recipeId);
     try {
-      const { error } = await supabase.from("likes").insert({ user_id: userId, recipe_id: recipeId });
+      const { error } = await supabase
+        .from("likes")
+        .insert({ user_id: userId, recipe_id: recipeId });
       if (error) {
-        await supabase.from("likes").delete().eq("user_id", userId).eq("recipe_id", recipeId);
+        await supabase
+          .from("likes")
+          .delete()
+          .eq("user_id", userId)
+          .eq("recipe_id", recipeId);
         showToast("Like removed ❤️‍🩹");
       } else {
         showToast("Liked ❤️");
       }
-      const { data } = await supabase.from("public_recipes_with_stats").select("*").eq("id", recipeId).single();
-      setItems((prev) => prev.map((r) => (r.id === recipeId ? (data as Recipe) : r)));
+      const { data } = await supabase
+        .from("public_recipes_with_stats")
+        .select("*")
+        .eq("id", recipeId)
+        .single();
+      setItems((prev) =>
+        prev.map((r) => (r.id === recipeId ? (data as Recipe) : r))
+      );
     } finally {
       setLiking(null);
     }
@@ -109,16 +116,22 @@ export default function FeedPage() {
   async function addToMyRecipes(recipeId: number, ownerId: string) {
     if (!userId) return showToast("Sign in to add");
     if (ownerId === userId) return showToast("You can't add your own recipe!");
-    const { error } = await supabase.from("user_added_recipes").insert({ user_id: userId, recipe_id: recipeId });
+    const { error } = await supabase
+      .from("user_added_recipes")
+      .insert({ user_id: userId, recipe_id: recipeId });
     if (error && (error as any).code !== "23505") showToast("Error adding recipe");
     else if (!error) showToast("Recipe added!");
     else showToast("Already added.");
   }
 
   const avatarUrl = (p: string | null) =>
-    p ? supabase.storage.from("profile-avatars").getPublicUrl(p).data.publicUrl : "/default-avatar.svg";
+    p
+      ? supabase.storage.from("profile-avatars").getPublicUrl(p).data.publicUrl
+      : "/default-avatar.svg";
   const imgUrl = (p: string | null) =>
-    p ? supabase.storage.from("recipe-media").getPublicUrl(p).data.publicUrl : null;
+    p
+      ? supabase.storage.from("recipe-media").getPublicUrl(p).data.publicUrl
+      : null;
 
   function scrollRow(dir: "left" | "right") {
     const el = document.getElementById("tag-row");
@@ -128,13 +141,28 @@ export default function FeedPage() {
   return (
     <div className="fade-in" style={{ padding: "1rem 0" }}>
       {toast && <Toast msg={toast} />}
+
       {/* ---- CATEGORY SCROLLER ---- */}
-      <div style={{ position: "relative", margin: "0 auto 1rem auto", maxWidth: 1000 }}>
+      <div
+        style={{
+          position: "relative",
+          margin: "0 auto 1rem auto",
+          maxWidth: 1000,
+          padding: "0 1rem",
+        }}
+      >
         <button
           onClick={() => scrollRow("left")}
-          style={{ position: "absolute", left: 0, top: "35%", background: "transparent", border: "none", cursor: "pointer" }}
+          className="btn-secondary"
+          style={{
+            position: "absolute",
+            left: 0,
+            top: "40%",
+            transform: "translateY(-50%)",
+            zIndex: 10,
+          }}
         >
-          <ChevronLeft size={22} />
+          <ChevronLeft size={18} />
         </button>
 
         <div
@@ -154,27 +182,37 @@ export default function FeedPage() {
                 setActiveTag(c.tag);
                 loadFeed(c.tag);
               }}
-              className={activeTag === c.tag ? "btn" : "btn btn-secondary"}
+              className={`btn-secondary ${
+                activeTag === c.tag ? "active-tag" : ""
+              }`}
               style={{
+                minWidth: 90,
+                borderRadius: 50,
                 display: "flex",
-                flexDirection: "column",
                 alignItems: "center",
-                minWidth: 80,
-                padding: "6px 10px",
-                borderRadius: 12,
+                justifyContent: "center",
+                flexDirection: "column",
+                fontSize: ".8rem",
+                padding: "8px 12px",
               }}
             >
-              <span style={{ fontSize: "1.3rem" }}>{c.emoji}</span>
-              <span style={{ fontSize: ".85rem", marginTop: 4 }}>{c.label}</span>
+              <span style={{ fontSize: "1.1rem" }}>{c.emoji}</span>
+              <span>{c.label}</span>
             </button>
           ))}
         </div>
 
         <button
           onClick={() => scrollRow("right")}
-          style={{ position: "absolute", right: 0, top: "35%", background: "transparent", border: "none", cursor: "pointer" }}
+          className="btn-secondary"
+          style={{
+            position: "absolute",
+            right: 0,
+            top: "40%",
+            transform: "translateY(-50%)",
+          }}
         >
-          <ChevronRight size={22} />
+          <ChevronRight size={18} />
         </button>
       </div>
 
@@ -182,105 +220,150 @@ export default function FeedPage() {
       {loading ? (
         <p style={{ textAlign: "center", color: "#777" }}>Loading...</p>
       ) : (
-        items.map((r) => {
-          const author = profileMap[r.user_id];
-          const isOwn = r.user_id === userId;
-          return (
-            <article
-              key={r.id}
-              className="card fade-in"
-              style={{
-                width: "100%",
-                maxWidth: 900,
-                margin: "1rem auto",
-                padding: "1rem",
-                borderRadius: 16,
-                border: "1px solid #eee",
-              }}
-            >
-              {/* Header (avatar + name now linkable to profile) */}
-              {author && (
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <Link to={`/u/${author.id}`} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+            gap: "1.5rem",
+            padding: "0 1rem",
+            maxWidth: 1000,
+            margin: "0 auto",
+          }}
+        >
+          {items.map((r) => {
+            const author = profileMap[r.user_id];
+            const isOwn = r.user_id === userId;
+            return (
+              <article
+                key={r.id}
+                className="card fade-in"
+                style={{
+                  borderRadius: 16,
+                  overflow: "hidden",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  boxShadow: "var(--shadow-md)",
+                  transition: "transform .2s ease",
+                }}
+              >
+                <Link to={`/r/${r.id}`} style={{ position: "relative" }}>
+                  {r.image_url && (
                     <img
-                      src={avatarUrl(author.avatar_url)}
-                      alt=""
-                      style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover" }}
+                      src={imgUrl(r.image_url)!}
+                      alt={r.title}
+                      style={{
+                        width: "100%",
+                        height: 220,
+                        objectFit: "cover",
+                        transition: "transform .3s ease",
+                      }}
                     />
-                    <strong style={{ textDecoration: "underline", textUnderlineOffset: 2 }}>
-                      {author.username}
-                    </strong>
-                  </Link>
-                  <small style={{ color: "#777" }}>{new Date(r.created_at).toLocaleDateString()}</small>
-                </div>
-              )}
-
-              {r.image_url && (
-                <Link to={`/r/${r.id}`}>
-                  <img
-                    src={imgUrl(r.image_url)!}
-                    alt={r.title}
-                    style={{
-                      width: "100%",
-                      height: 250,
-                      objectFit: "cover",
-                      borderRadius: 10,
-                      marginTop: 8,
-                    }}
-                  />
-                </Link>
-              )}
-
-              <h3 style={{ color: "var(--brand)", marginTop: 8 }}>
-                <Link to={`/r/${r.id}`}>{r.title}</Link>
-              </h3>
-              {r.caption && <p style={{ color: "#555" }}>{r.caption}</p>}
-
-              {/* ✅ Added recipe info below caption */}
-              {(r.prep_time || r.cook_time || r.difficulty) && (
-                <div style={{ fontSize: ".9rem", color: "#555", marginTop: 4 }}>
-                  {(r.prep_time || r.cook_time) && (
-                    <span>
-                      ⏱{" "}
-                      {(() => {
-                        const extract = (s: string) => parseInt(s.replace(/[^0-9]/g, "")) || 0;
-                        const p = extract(r.prep_time || "0");
-                        const c = extract(r.cook_time || "0");
-                        return `${p + c} min total`;
-                      })()}
-                    </span>
                   )}
-                  {r.difficulty && <span style={{ marginLeft: 8 }}>💪 {r.difficulty}</span>}
-                </div>
-              )}
+                </Link>
 
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
-                <button className="btn" onClick={() => toggleLike(r.id)} disabled={liking === r.id}>
-                  {liking === r.id ? "…" : "♥"} {r.likes_count}
-                </button>
-                {!isOwn && (
-                  <button className="btn btn-secondary" onClick={() => addToMyRecipes(r.id, r.user_id)}>
-                    ➕ Add
-                  </button>
-                )}
-                <span style={{ color: "#777", fontSize: "1.2rem" }}>💬 {r.comments_count}</span>
-              </div>
+                <div style={{ padding: "1rem" }}>
+                  <h3
+                    style={{
+                      color: "var(--brand)",
+                      fontSize: "1.1rem",
+                      fontWeight: 700,
+                    }}
+                  >
+                    <Link to={`/r/${r.id}`}>{r.title}</Link>
+                  </h3>
+                  {r.caption && (
+                    <p style={{ color: "#555", fontSize: ".9rem", marginTop: 4 }}>
+                      {r.caption}
+                    </p>
+                  )}
 
-              {r.tags && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
-                  {r.tags.map((t) => (
-                    <span key={t} className="tag">
-                      #{t}
-                    </span>
-                  ))}
+                  {(r.prep_time || r.cook_time || r.difficulty) && (
+                    <div
+                      style={{
+                        fontSize: ".85rem",
+                        color: "#777",
+                        marginTop: 6,
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 6,
+                      }}
+                    >
+                      {r.prep_time && <span>⏱ {r.prep_time}</span>}
+                      {r.cook_time && <span>🔥 {r.cook_time}</span>}
+                      {r.difficulty && <span>💪 {r.difficulty}</span>}
+                    </div>
+                  )}
                 </div>
-              )}
-            </article>
-          );
-        })
+
+                <div
+                  style={{
+                    padding: "0 1rem 1rem",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <button
+                      className="btn"
+                      onClick={() => toggleLike(r.id)}
+                      disabled={liking === r.id}
+                      style={{ padding: "6px 10px" }}
+                    >
+                      <Heart
+                        size={16}
+                        fill={liking === r.id ? "var(--brand)" : "none"}
+                        color="white"
+                      />{" "}
+                      {r.likes_count}
+                    </button>
+                    {!isOwn && (
+                      <button
+                        className="btn-secondary"
+                        onClick={() => addToMyRecipes(r.id, r.user_id)}
+                        style={{ padding: "6px 10px" }}
+                      >
+                        ➕ Add
+                      </button>
+                    )}
+                    <span style={{ color: "#777", fontSize: "1rem" }}>💬 {r.comments_count ?? 0}</span>
+                  </div>
+
+                  {author && (
+                    <Link
+                      to={`/u/${author.id}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        fontSize: ".85rem",
+                      }}
+                    >
+                      <img
+                        src={avatarUrl(author.avatar_url)}
+                        alt=""
+                        style={{
+                          width: 26,
+                          height: 26,
+                          borderRadius: "50%",
+                          objectFit: "cover",
+                        }}
+                      />
+                      <span style={{ color: "#555" }}>{author.username}</span>
+                    </Link>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
       )}
-      {items.length === 0 && !loading && (
-        <p style={{ textAlign: "center", marginTop: "2rem", color: "#777" }}>No recipes found.</p>
+
+      {!loading && items.length === 0 && (
+        <p style={{ textAlign: "center", marginTop: "2rem", color: "#777" }}>
+          No recipes found.
+        </p>
       )}
     </div>
   );

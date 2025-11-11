@@ -3,7 +3,6 @@ import { supabase } from "../lib/supabase";
 import { Link, useNavigate } from "react-router-dom";
 import { Toast } from "../components/Toast";
 
-
 type Profile = {
   id: string;
   username: string | null;
@@ -45,11 +44,9 @@ export default function MyAccountPage() {
     dietary_prefs: [] as string[],
   });
   const [saving, setSaving] = useState(false);
-  const [query, setQuery] = useState(""); // 🔎 search box
+  const [query, setQuery] = useState("");
   const navigate = useNavigate();
   const [toast, setToast] = useState("");
-
-
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -86,7 +83,9 @@ export default function MyAccountPage() {
   }
 
   const avatarUrl = (p: string | null) =>
-    p ? supabase.storage.from("profile-avatars").getPublicUrl(p).data.publicUrl : "/default-avatar.svg";
+    p
+      ? supabase.storage.from("profile-avatars").getPublicUrl(p).data.publicUrl
+      : "/default-avatar.svg";
   const imgUrl = (p: string | null) =>
     p ? supabase.storage.from("recipe-media").getPublicUrl(p).data.publicUrl : null;
 
@@ -132,39 +131,40 @@ export default function MyAccountPage() {
   }
 
   const active = tab === "own" ? own : added;
-  const filtered = active.filter((r) =>
-    r.title.toLowerCase().includes(query.trim().toLowerCase())
-  );
+  const filtered = active.filter((r) => r.title.toLowerCase().includes(query.trim().toLowerCase()));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-      {toast && <Toast msg={toast} />}  
+    <div className="fade-in" style={{ width: "100%", padding: "2rem 1rem" }}>
+      {toast && <Toast msg={toast} />}
       {!profile ? (
-        <p>Loading...</p>
+        <p style={{ textAlign: "center" }}>Loading...</p>
       ) : (
-        <section
-          className="card"
-          style={{
-            padding: "2rem",
-            width: "100%",
-            maxWidth: 900,
-            display: "grid",
-            gridTemplateColumns: "280px 1fr",
-            gap: "1.5rem",
-          }}
-        >
-          {/* LEFT - Profile info */}
-          <div style={{ textAlign: "center" }}>
+        <>
+          {/* === PROFILE HEADER === */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              background: "var(--brand-50)",
+              borderRadius: 20,
+              padding: "2rem",
+              boxShadow: "var(--shadow-md)",
+              maxWidth: 950,
+              margin: "0 auto 2rem auto",
+            }}
+          >
             <div style={{ position: "relative" }}>
               <img
-                src={avatarUrl(profile.avatar_url)!}
-                alt=""
+                src={avatarUrl(profile.avatar_url)}
+                alt="Avatar"
                 style={{
-                  width: 120,
-                  height: 120,
+                  width: 130,
+                  height: 130,
                   borderRadius: "50%",
-                  border: "3px solid var(--brand)",
+                  border: "4px solid var(--brand)",
                   objectFit: "cover",
+                  boxShadow: "0 3px 10px rgba(0,0,0,0.1)",
                 }}
               />
               <label
@@ -175,111 +175,241 @@ export default function MyAccountPage() {
                   background: "var(--brand)",
                   color: "#fff",
                   borderRadius: "50%",
-                  width: 32,
-                  height: 32,
+                  width: 36,
+                  height: 36,
                   display: "grid",
                   placeItems: "center",
                   cursor: "pointer",
+                  fontSize: "1.2rem",
                 }}
               >
                 ⬆
                 <input type="file" accept="image/*" onChange={uploadAvatar} style={{ display: "none" }} />
               </label>
             </div>
-            <h2 style={{ color: "var(--brand)", marginTop: 10 }}>{edit.username}</h2>
-            {edit.location && <p style={{ color: "#999" }}>📍{edit.location}</p>}
-            {edit.bio && <p style={{ marginTop: 6 }}>{edit.bio}</p>}
-            <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center" }}>
-              {edit.dietary_prefs.map((p) => (
-                <span key={p} className="btn btn-secondary" style={{ padding: "4px 10px" }}>
-                  {p}
-                </span>
-              ))}
-            </div>
+
+            <h2 style={{ color: "var(--brand)", marginTop: "1rem", fontWeight: 800 }}>
+              {edit.username || "Unnamed User"}
+            </h2>
+            {edit.location && <p style={{ color: "#666" }}>📍 {edit.location}</p>}
+            {edit.bio && (
+              <p style={{ color: "#444", marginTop: 4, maxWidth: 720, textAlign: "center" }}>{edit.bio}</p>
+            )}
+
+            {edit.dietary_prefs.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  justifyContent: "center",
+                  gap: 8,
+                  marginTop: 10,
+                }}
+              >
+                {edit.dietary_prefs.map((p) => (
+                  <span key={p} className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: ".9rem" }}>
+                    {p}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* RIGHT - Edit profile form */}
-          <div>
-            <h3 style={{ color: "var(--brand)", marginBottom: 10 }}>Edit Profile</h3>
-            <input value={edit.username} onChange={(e) => setEdit({ ...edit, username: e.target.value })} placeholder="Username" />
-            <input value={edit.location} onChange={(e) => setEdit({ ...edit, location: e.target.value })} placeholder="Location" />
-            <textarea rows={3} value={edit.bio} onChange={(e) => setEdit({ ...edit, bio: e.target.value })} placeholder="Bio" />
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+          {/* === EDIT SECTION === */}
+          <div
+            className="card"
+            style={{
+              maxWidth: 950,
+              margin: "0 auto 2.5rem auto",
+              borderRadius: 18,
+              padding: "1.8rem",
+              boxShadow: "var(--shadow-md)",
+            }}
+          >
+            <h3
+              style={{
+                color: "var(--brand)",
+                marginBottom: 14,
+                textAlign: "center",
+                fontSize: "1.4rem",
+              }}
+            >
+              Edit Profile
+            </h3>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))",
+                gap: 14,
+              }}
+            >
+              <input
+                value={edit.username}
+                onChange={(e) => setEdit({ ...edit, username: e.target.value })}
+                placeholder="Username"
+              />
+              <input
+                value={edit.location}
+                onChange={(e) => setEdit({ ...edit, location: e.target.value })}
+                placeholder="Location"
+              />
+            </div>
+
+            {/* ✅ Full-width description box */}
+            <textarea
+              rows={4}
+              value={edit.bio}
+              onChange={(e) => setEdit({ ...edit, bio: e.target.value })}
+              placeholder="Bio"
+              style={{ marginTop: 10, width: "100%" }}
+            />
+
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 6,
+                marginTop: 10,
+                justifyContent: "center",
+              }}
+            >
               {PREF_OPTIONS.map((p) => (
-                <button key={p} onClick={() => togglePref(p)} className={edit.dietary_prefs.includes(p) ? "btn" : "btn btn-secondary"}>
+                <button
+                  key={p}
+                  onClick={() => togglePref(p)}
+                  className={edit.dietary_prefs.includes(p) ? "btn" : "btn btn-secondary"}
+                >
                   {p}
                 </button>
               ))}
             </div>
-            <button className="btn" disabled={saving} onClick={saveProfile} style={{ marginTop: 10 }}>
-              {saving ? "Saving..." : "Save"}
+
+            <button
+              className="btn"
+              disabled={saving}
+              onClick={saveProfile}
+              style={{ display: "block", margin: "20px auto 0 auto", minWidth: 180 }}
+            >
+              {saving ? "Saving..." : "Save Changes"}
             </button>
-
-            <div style={{ marginTop: 16 }}>
-              <button onClick={() => setTab("own")} className={tab === "own" ? "btn" : "btn btn-secondary"}>
-                Created
-              </button>
-              <button onClick={() => setTab("added")} className={tab === "added" ? "btn" : "btn btn-secondary"}>
-                Added
-              </button>
-            </div>
-
-            {/* 🔎 Search only your own/added list */}
-            <input
-              type="text"
-              placeholder={`Search ${tab === "own" ? "your" : "saved"} recipes…`}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              style={{ marginTop: 12, width: "100%", maxWidth: 360 }}
-            />
           </div>
-        </section>
-      )}
 
-      {/* Recipe Grid */}
-      <div
-        style={{
-          maxWidth: 900,
-          width: "100%",
-          marginTop: 24,
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill,minmax(250px,1fr))",
-          gap: "1rem",
-        }}
-      >
-        {filtered.map((r) => (
-          <div key={r.id} className="card" style={{ overflow: "hidden", position: "relative" }}>
-            <Link to={`/r/${r.id}`}>
-              {r.image_url && <img src={imgUrl(r.image_url)!} alt="" style={{ width: "100%", height: 150, objectFit: "cover" }} />}
-            </Link>
-            <div style={{ padding: 12 }}>
-              <strong style={{ color: "var(--brand)" }}>
-                <Link to={`/r/${r.id}`} style={{ textDecoration: "underline", textUnderlineOffset: 3 }}>
-                  {r.title}
+          {/* === RECIPE TABS === */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              gap: 10,
+              marginBottom: 20,
+              flexWrap: "wrap",
+            }}
+          >
+            <button onClick={() => setTab("own")} className={`btn ${tab === "own" ? "" : "btn-secondary"}`}>
+              Created Recipes
+            </button>
+            <button onClick={() => setTab("added")} className={`btn ${tab === "added" ? "" : "btn-secondary"}`}>
+              Saved Recipes
+            </button>
+          </div>
+
+          {/* ✅ Slightly longer search box */}
+          <input
+            type="text"
+            placeholder={`Search ${tab === "own" ? "your" : "saved"} recipes…`}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            style={{
+              display: "block",
+              margin: "0 auto 1.5rem auto",
+              maxWidth: 520,
+              width: "100%",
+            }}
+          />
+
+          {/* === RECIPE GRID === */}
+          <div
+            style={{
+              maxWidth: 1000,
+              margin: "0 auto",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))",
+              gap: "1.5rem",
+            }}
+          >
+            {filtered.map((r) => (
+              <div
+                key={r.id}
+                className="card fade-in"
+                style={{
+                  overflow: "hidden",
+                  borderRadius: 16,
+                  boxShadow: "var(--shadow-md)",
+                  background: "#fff",
+                }}
+              >
+                <Link to={`/r/${r.id}`}>
+                  {r.image_url && (
+                    <img
+                      src={imgUrl(r.image_url)!}
+                      alt=""
+                      style={{ width: "100%", height: 180, objectFit: "cover" }}
+                    />
+                  )}
                 </Link>
-              </strong>
-              {r.caption && <p style={{ fontSize: ".9rem", color: "#888" }}>{r.caption}</p>}
+                <div style={{ padding: "0.9rem 1rem" }}>
+                  <strong style={{ color: "var(--brand)", fontSize: "1.05rem" }}>
+                    <Link to={`/r/${r.id}`} style={{ textDecoration: "none", color: "var(--brand)" }}>
+                      {r.title}
+                    </Link>
+                  </strong>
+                  {r.caption && (
+                    <p
+                      style={{
+                        fontSize: ".9rem",
+                        color: "#666",
+                        marginTop: 4,
+                        lineHeight: 1.3,
+                      }}
+                    >
+                      {r.caption}
+                    </p>
+                  )}
 
-              {tab === "own" ? (
-                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                  <button className="btn btn-secondary" onClick={() => navigate(`/edit/${r.id}`)}>
-                    ✏️ Edit
-                  </button>
-                  <button className="btn btn-danger" onClick={() => deleteRecipe(r.id)}>
-                    🗑 Delete
-                  </button>
+                  {tab === "own" ? (
+                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                      <button className="btn btn-secondary" onClick={() => navigate(`/edit/${r.id}`)}>
+                        ✏️ Edit
+                      </button>
+                      <button className="btn btn-danger" onClick={() => deleteRecipe(r.id)}>
+                        🗑 Delete
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                      <button className="btn btn-danger" onClick={() => removeAddedRecipe(r.id)}>
+                        🗑 Remove
+                      </button>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                  <button className="btn btn-danger" onClick={() => removeAddedRecipe(r.id)}>
-                    🗑 Remove
-                  </button>
-                </div>
-              )}
-            </div>
+              </div>
+            ))}
+            {filtered.length === 0 && (
+              <p
+                style={{
+                  textAlign: "center",
+                  color: "#777",
+                  gridColumn: "1 / -1",
+                  marginTop: "1rem",
+                }}
+              >
+                No recipes found.
+              </p>
+            )}
           </div>
-        ))}
-      </div>
+        </>
+      )}
     </div>
   );
 }

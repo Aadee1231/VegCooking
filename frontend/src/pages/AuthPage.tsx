@@ -41,55 +41,123 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="card fade-in" style={{ maxWidth: 420, margin: "5rem auto", padding: "2rem" }}>
-      <h2 style={{ textAlign: "center", color: "#2e7d32", marginBottom: "1.5rem" }}>
-        {isSignup ? "Create Account" : "Sign In"}
-      </h2>
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "linear-gradient(135deg, #e8f5e9, #c8e6c9, #a5d6a7)",
+        backgroundSize: "200% 200%",
+        animation: "gradientShift 10s ease infinite",
+        padding: "2rem",
+      }}
+    >
+      <div
+        className="fade-in"
+        style={{
+          width: "100%",
+          maxWidth: 420,
+          background: "rgba(255,255,255,0.8)",
+          backdropFilter: "blur(14px)",
+          borderRadius: 20,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
+          padding: "2.2rem 2rem",
+        }}
+      >
+        <h1
+          style={{
+            textAlign: "center",
+            color: "var(--brand)",
+            fontWeight: 800,
+            fontSize: "1.8rem",
+            marginBottom: "1.5rem",
+          }}
+        >
+          {isSignup ? "Create Account" : "Welcome Back"}
+        </h1>
 
-      <form onSubmit={handleAuth} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-        {isSignup && (
+        <form
+          onSubmit={handleAuth}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "1rem",
+          }}
+        >
+          {isSignup && (
+            <input
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+            />
+          )}
           <input
-            placeholder="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            type="email"
+            placeholder="Email address"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             required
           />
-        )}
-        <input
-          type="email"
-          placeholder="Email address"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-        <button className="btn" disabled={loading}>
-          {loading ? "Please wait..." : isSignup ? "Sign Up" : "Sign In"}
-        </button>
-      </form>
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
 
-      <p style={{ textAlign: "center", marginTop: "1rem", color: "#555" }}>
-        {isSignup ? "Already have an account?" : "Don’t have an account?"}{" "}
-        <button
-          type="button"
+          <button
+            className="btn"
+            disabled={loading}
+            style={{
+              fontSize: "1rem",
+              padding: "12px",
+              borderRadius: 12,
+              marginTop: "0.5rem",
+            }}
+          >
+            {loading ? "Please wait..." : isSignup ? "Sign Up" : "Sign In"}
+          </button>
+        </form>
+
+        <div
           style={{
-            background: "none",
-            border: "none",
-            color: "#1565c0",
-            fontWeight: 600,
-            cursor: "pointer",
+            textAlign: "center",
+            marginTop: "1rem",
+            color: "#555",
+            fontSize: "0.95rem",
           }}
-          onClick={() => setIsSignup(!isSignup)}
         >
-          {isSignup ? "Sign in" : "Sign up"}
-        </button>
-      </p>
+          {isSignup ? "Already have an account?" : "Don’t have an account?"}{" "}
+          <button
+            type="button"
+            onClick={() => setIsSignup(!isSignup)}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--brand)",
+              fontWeight: 700,
+              cursor: "pointer",
+              fontSize: "0.95rem",
+            }}
+          >
+            {isSignup ? "Sign in" : "Sign up"}
+          </button>
+        </div>
+      </div>
+
+      {/* animated gradient keyframes */}
+      <style>
+        {`
+          @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+          }
+        `}
+      </style>
     </div>
   );
 }

@@ -3,9 +3,6 @@ import { useParams, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { Toast } from "../components/Toast";
 
-
-
-/* ---------- Types ---------- */
 type Recipe = {
   id: number;
   title: string;
@@ -15,7 +12,6 @@ type Recipe = {
   created_at: string;
   user_id: string;
   tags?: string[] | null;
-
   prep_time?: string | null;
   cook_time?: string | null;
   difficulty?: string | null;
@@ -32,9 +28,6 @@ type CommentRow = {
   profiles?: { username: string | null; avatar_url: string | null } | null;
 };
 
-
-
-
 export default function RecipeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
@@ -45,16 +38,13 @@ export default function RecipeDetailPage() {
   const [similar, setSimilar] = useState<Partial<Recipe>[]>([]);
   const [likeCount, setLikeCount] = useState<number>(0);
   const [commentCount, setCommentCount] = useState<number>(0);
-
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
   const [liking, setLiking] = useState(false);
   const [adding, setAdding] = useState(false);
   const [toast, setToast] = useState<string>("");
-
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [newComment, setNewComment] = useState("");
-
   const [commentLikes, setCommentLikes] = useState<Record<number, number>>({});
 
   const avatarUrl = (p: string | null) =>
@@ -62,10 +52,6 @@ export default function RecipeDetailPage() {
   const imgUrl = (p: string | null) =>
     p ? supabase.storage.from("recipe-media").getPublicUrl(p).data.publicUrl : null;
 
-
-
-
-  /* ---------- Init ---------- */
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
   }, []);
@@ -75,24 +61,19 @@ export default function RecipeDetailPage() {
     loadRecipe();
   }, [id]);
 
-  /* ---------- Toast helper ---------- */
   function showToast(message: string) {
     setToast(message);
     setTimeout(() => setToast(""), 2500);
   }
 
-  /* ---------- Load all ---------- */
   async function loadRecipe() {
     setLoading(true);
-
     const { data: rec } = await supabase.from("recipes").select("*").eq("id", id).single();
     if (!rec) {
       setLoading(false);
       return;
     }
     setRecipe(rec);
-
-    // author
     const { data: prof } = await supabase
       .from("profiles")
       .select("id,username,avatar_url")
@@ -100,7 +81,6 @@ export default function RecipeDetailPage() {
       .single();
     setAuthor(prof);
 
-    // ingredients + steps
     const [{ data: ing }, { data: st }] = await Promise.all([
       supabase
         .from("recipe_ingredients")
@@ -120,7 +100,6 @@ export default function RecipeDetailPage() {
     );
     setSteps(st ?? []);
 
-    // counts
     const { count: likes } = await supabase
       .from("likes")
       .select("*", { count: "exact", head: true })
@@ -129,7 +108,6 @@ export default function RecipeDetailPage() {
 
     await loadComments();
 
-    // similar
     if (rec.tags?.length) {
       const { data: sims } = await supabase
         .from("public_recipes_with_stats")
@@ -139,7 +117,6 @@ export default function RecipeDetailPage() {
         .limit(6);
       setSimilar(sims ?? []);
     }
-
     setLoading(false);
   }
 
@@ -151,19 +128,15 @@ export default function RecipeDetailPage() {
       .order("created_at", { ascending: false });
     setComments((data ?? []) as any);
     setCommentCount(count ?? 0);
-
     const { data: likesData } = await supabase.from("comment_likes").select("*");
     const likeMap: Record<number, number> = {};
-    (likesData ?? []).forEach(l => likeMap[l.comment_id] = (likeMap[l.comment_id] || 0) + 1);
+    (likesData ?? []).forEach((l) => (likeMap[l.comment_id] = (likeMap[l.comment_id] || 0) + 1));
     setCommentLikes(likeMap);
   }
 
-  /* ---------- Comment actions ---------- */
   async function toggleCommentLike(commentId: number) {
     if (!currentUserId) return showToast("Sign in first!");
-    const { error } = await supabase
-      .from("comment_likes")
-      .insert({ comment_id: commentId, user_id: currentUserId });
+    const { error } = await supabase.from("comment_likes").insert({ comment_id: commentId, user_id: currentUserId });
     if (error) {
       await supabase.from("comment_likes").delete().eq("comment_id", commentId).eq("user_id", currentUserId);
       setCommentLikes((m) => ({ ...m, [commentId]: Math.max(0, (m[commentId] || 1) - 1) }));
@@ -178,15 +151,12 @@ export default function RecipeDetailPage() {
     showToast("Comment deleted");
   }
 
-
-  /* ---------- Actions ---------- */
   async function likeRecipe() {
     if (!currentUserId || !recipe) return showToast("Sign in first!");
     setLiking(true);
     try {
       const { error } = await supabase.from("likes").insert({ user_id: currentUserId, recipe_id: recipe.id });
       if (error) {
-        // toggle off if already liked
         await supabase.from("likes").delete().eq("user_id", currentUserId).eq("recipe_id", recipe.id);
         setLikeCount((c) => Math.max(0, c - 1));
         showToast("Like removed");
@@ -209,7 +179,7 @@ export default function RecipeDetailPage() {
         .insert({ user_id: currentUserId, recipe_id: recipe.id });
       if (error && (error as any).code !== "23505") throw error;
       showToast("Recipe added to your account!");
-    } catch (e: any) {
+    } catch {
       showToast("Already added.");
     } finally {
       setAdding(false);
@@ -222,8 +192,10 @@ export default function RecipeDetailPage() {
     if (!body) return;
     setPosting(true);
     try {
-      await supabase.from("comments").insert({ 
-        recipe_id: Number(id), user_id: currentUserId, body 
+      await supabase.from("comments").insert({
+        recipe_id: Number(id),
+        user_id: currentUserId,
+        body,
       });
       setNewComment("");
       await loadComments();
@@ -235,7 +207,6 @@ export default function RecipeDetailPage() {
     }
   }
 
-  /* ---------- Render ---------- */
   if (loading) return <p style={{ textAlign: "center", marginTop: "2rem" }}>Loading recipe...</p>;
   if (!recipe) return <p style={{ textAlign: "center", marginTop: "2rem" }}>Recipe not found.</p>;
 
@@ -243,12 +214,12 @@ export default function RecipeDetailPage() {
     <div className="fade-in" style={{ maxWidth: 900, margin: "0 auto 4rem auto" }}>
       {toast && <Toast msg={toast} />}
 
-      {/* Hero */}
+      {/* --- Hero --- */}
       {recipe.image_url && (
         <div
           style={{
             position: "relative",
-            height: 300,
+            height: 320,
             borderRadius: 20,
             overflow: "hidden",
             marginBottom: "1.5rem",
@@ -262,7 +233,7 @@ export default function RecipeDetailPage() {
               width: "100%",
               height: "100%",
               objectFit: "cover",
-              filter: "brightness(85%)",
+              filter: "brightness(80%)",
             }}
           />
           <div
@@ -271,68 +242,80 @@ export default function RecipeDetailPage() {
               bottom: 20,
               left: 20,
               color: "white",
-              textShadow: "0 1px 3px rgba(0,0,0,.5)",
+              textShadow: "0 1px 4px rgba(0,0,0,.5)",
             }}
           >
-            <h1 style={{ fontSize: "2rem", fontWeight: 700 }}>{recipe.title}</h1>
+            <h1 style={{ fontSize: "2rem", fontWeight: 800 }}>{recipe.title}</h1>
             {recipe.caption && <p style={{ fontSize: "1.1rem" }}>{recipe.caption}</p>}
           </div>
         </div>
       )}
 
-      {/* Author */}
+      {/* --- Author Section --- */}
       {author && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: "1rem" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            marginBottom: "1.2rem",
+          }}
+        >
           <img
             src={avatarUrl(author.avatar_url)}
             alt=""
-            style={{ width: 50, height: 50, borderRadius: "50%", objectFit: "cover" }}
+            style={{ width: 46, height: 46, borderRadius: "50%", objectFit: "cover" }}
           />
           <div>
-            <Link to={`/u/${author.id}`} style={{ fontWeight: 600, color: "var(--brand)", textDecoration: "underline" }}>
+            <Link
+              to={`/u/${author.id}`}
+              style={{
+                fontWeight: 600,
+                color: "var(--brand)",
+                textDecoration: "underline",
+              }}
+            >
               {author.username ?? "Unknown Chef"}
             </Link>
-            <div style={{ fontSize: ".9rem", color: "#777" }}>
+            <div style={{ fontSize: ".85rem", color: "#777" }}>
               {new Date(recipe.created_at).toLocaleDateString()}
             </div>
           </div>
         </div>
       )}
 
-      {/* Controls */}
-      {currentUserId === recipe.user_id ? (
-        <Link
-          to={`/edit/${recipe.id}`}
-          className="btn"
-          style={{ display: "inline-block", marginBottom: 10 }}
-        >
-          ✏️ Edit Recipe
-        </Link>
-      ) : (
-        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-          <button className="btn" disabled={liking} onClick={likeRecipe}>
-            ♥ {liking ? "…" : likeCount}
-          </button>
-          <button className="btn btn-secondary" disabled={adding} onClick={addRecipe}>
-            ➕ Add
-          </button>
-          <span style={{ color: "#777", alignSelf: "center", fontSize: ".9rem" }}>
-            💬 {commentCount}
-          </span>
-        </div>
-      )}
+      {/* --- Controls --- */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: "1rem" }}>
+        {currentUserId === recipe.user_id ? (
+          <Link to={`/edit/${recipe.id}`} className="btn">
+            ✏️ Edit Recipe
+          </Link>
+        ) : (
+          <>
+            <button className="btn" disabled={liking} onClick={likeRecipe}>
+              ♥ {liking ? "…" : likeCount}
+            </button>
+            <button className="btn btn-secondary" disabled={adding} onClick={addRecipe}>
+              ➕ Add
+            </button>
+            <span style={{ color: "#777", alignSelf: "center", fontSize: ".9rem" }}>
+              💬 {commentCount}
+            </span>
+          </>
+        )}
+      </div>
 
-      {/* ✅ New recipe info section */}
+      {/* --- Info Section --- */}
       {(recipe.prep_time || recipe.cook_time || recipe.difficulty) && (
         <div
           style={{
-            background: "rgba(0,0,0,0.03)",
+            background: "#f9faf9",
             padding: "12px 16px",
             borderRadius: 10,
             marginBottom: "1.2rem",
             display: "flex",
             flexWrap: "wrap",
-            gap: "12px",
+            gap: 12,
             fontSize: ".95rem",
           }}
         >
@@ -342,8 +325,7 @@ export default function RecipeDetailPage() {
             <span>
               🕒 Total:{" "}
               {(() => {
-                const extract = (s: string) =>
-                  parseInt(s.replace(/[^0-9]/g, "")) || 0;
+                const extract = (s: string) => parseInt(s.replace(/[^0-9]/g, "")) || 0;
                 const p = extract(recipe.prep_time || "0");
                 const c = extract(recipe.cook_time || "0");
                 return `${p + c} min`;
@@ -354,24 +336,24 @@ export default function RecipeDetailPage() {
         </div>
       )}
 
-
-      {/* Description */}
+      {/* --- Description --- */}
       {recipe.description && (
-        <p style={{ marginBottom: "1.5rem", lineHeight: 1.6 }}>{recipe.description}</p>
+        <p style={{ marginBottom: "1.5rem", lineHeight: 1.6, color: "#444" }}>{recipe.description}</p>
       )}
 
-      {/* Ingredients */}
+      {/* --- Ingredients --- */}
       <section style={{ marginBottom: "2rem" }}>
         <h3 style={{ color: "var(--brand)", marginBottom: 8 }}>Ingredients</h3>
-        <ul style={{ listStyle: "none", padding: 0 }}>
+        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
           {ingredients.map((ing, i) => (
             <li
               key={i}
               style={{
-                background: "rgba(0,0,0,0.03)",
+                background: "#f4f6f4",
                 padding: "8px 12px",
                 borderRadius: 8,
                 marginBottom: 6,
+                fontSize: ".95rem",
               }}
             >
               <strong>{ing.name}</strong>{" "}
@@ -383,7 +365,7 @@ export default function RecipeDetailPage() {
         </ul>
       </section>
 
-      {/* Steps */}
+      {/* --- Steps --- */}
       <section style={{ marginBottom: "2rem" }}>
         <h3 style={{ color: "var(--brand)", marginBottom: 8 }}>Steps</h3>
         <ol style={{ lineHeight: 1.6, paddingLeft: "1.2rem" }}>
@@ -395,8 +377,7 @@ export default function RecipeDetailPage() {
         </ol>
       </section>
 
-
-      {/* Similar */}
+      {/* --- Similar Recipes --- */}
       {similar.length > 0 && (
         <section style={{ marginTop: 24 }}>
           <h3 style={{ color: "var(--brand)", marginBottom: "0.6rem" }}>Similar Recipes</h3>
@@ -408,7 +389,16 @@ export default function RecipeDetailPage() {
             }}
           >
             {similar.map((s) => (
-              <Link key={s.id} to={`/r/${s.id}`} className="card" style={{ overflow: "hidden" }}>
+              <Link
+                key={s.id}
+                to={`/r/${s.id}`}
+                className="card"
+                style={{
+                  overflow: "hidden",
+                  borderRadius: 14,
+                  boxShadow: "var(--shadow-sm)",
+                }}
+              >
                 {s.image_url && (
                   <img
                     src={imgUrl(s.image_url)!}
@@ -430,8 +420,15 @@ export default function RecipeDetailPage() {
         </section>
       )}
 
-      {/* Comments section */}
-      <section className="card" style={{ padding: 16, borderRadius: 14 }}>
+      {/* --- Comments Section --- */}
+      <section
+        className="card"
+        style={{
+          padding: 16,
+          borderRadius: 14,
+          marginTop: 28,
+        }}
+      >
         <h3 style={{ color: "var(--brand)", marginBottom: 10 }}>Comments ({commentCount})</h3>
         {currentUserId && (
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
