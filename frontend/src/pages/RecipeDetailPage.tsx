@@ -47,8 +47,6 @@ export default function RecipeDetailPage() {
   const [newComment, setNewComment] = useState("");
   const [commentLikes, setCommentLikes] = useState<Record<number, number>>({});
   const [isRecipeLiked, setIsRecipeLiked] = useState(false);
-  const [likedComments, setLikedComments] = useState<number[]>([]);
-
 
   const avatarUrl = (p: string | null) =>
     p ? supabase.storage.from("profile-avatars").getPublicUrl(p).data.publicUrl : "/default-avatar.svg";
