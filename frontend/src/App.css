@@ -192,66 +192,7 @@ footer{
 .fade-in{ animation: fadeIn .25s ease both; }
 @keyframes fadeIn{ from{opacity:0; transform: translateY(4px);} to{opacity:1; transform:none;} }
 
-/* --- MODERN DARK THEME --- */
-:root[data-theme="dark"] {
-  --bg: #0b0c10;
-  --surface: #121417;
-  --surface-2: #181c22;
-  --surface-glass: rgba(255,255,255,0.05);
-  --text: #e5e8ed;
-  --muted: #9ea7b5;
-  --line: #242a33;
-  --brand: #4ade80;          /* emerald green */
-  --brand-700: #22c55e;
-  --brand-50: #04210f;
-  --shadow-sm: 0 3px 8px rgba(0,0,0,0.4);
-  --shadow-md: 0 6px 16px rgba(0,0,0,0.5);
-  --shadow-lg: 0 12px 30px rgba(0,0,0,0.6);
-  color-scheme: dark;
-  transition: background-color 0.4s ease, color 0.4s ease;
-}
 
-:root[data-theme="dark"] body {
-  background: radial-gradient(circle at 20% 30%, #0f1116, #090a0c 90%);
-}
-
-:root[data-theme="dark"] header {
-  backdrop-filter: blur(10px);
-  background: var(--surface-glass);
-  border-bottom: 1px solid var(--line);
-}
-
-:root[data-theme="dark"] .card,
-:root[data-theme="dark"] .recipe-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  box-shadow: 0 0 12px rgba(0,0,0,0.6);
-  transition: transform 0.2s ease, box-shadow 0.3s ease;
-}
-
-:root[data-theme="dark"] .card:hover,
-:root[data-theme="dark"] .recipe-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.8);
-}
-
-:root[data-theme="dark"] input,
-:root[data-theme="dark"] textarea,
-:root[data-theme="dark"] select {
-  background: var(--surface-2);
-  color: var(--text);
-  border: 1px solid var(--line);
-}
-
-:root[data-theme="dark"] a {
-  color: var(--brand);
-}
-
-:root[data-theme="dark"] footer {
-  background: var(--surface);
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-}
 
 * {
   transition: background-color 0.3s ease, color 0.3s ease, border 0.3s ease;
@@ -368,17 +309,6 @@ button.active-tag {
   outline: none;
 }
 
-/* dark mode */
-:root[data-theme="dark"] .ios-searchbar {
-  background: rgba(18, 20, 24, 0.8);
-  border: 1px solid var(--line);
-  color: var(--text);
-}
-
-:root[data-theme="dark"] .ios-searchbar i {
-  color: var(--muted);
-}
-
 /* === RESPONSIVE VISIBILITY === */
 @media screen and (max-width: 640px) {
   .ios-searchbar {
@@ -473,16 +403,6 @@ button.active-tag {
   font-size: 0.8rem;
   color: var(--muted);
   margin-top: 2px;
-}
-
-/* Dark mode */
-:root[data-theme="dark"] .search-dropdown {
-  background: rgba(25, 27, 33, 0.85);
-  border: 1px solid rgba(60, 60, 60, 0.7);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
-}
-:root[data-theme="dark"] .search-item:hover {
-  background: rgba(255, 255, 255, 0.05);
 }
 
 @keyframes fadeIn {

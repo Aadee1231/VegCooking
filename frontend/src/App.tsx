@@ -17,8 +17,8 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [focused, setFocused] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark">(
-    (localStorage.getItem("vc_theme") as "light" | "dark") || "light"
+  const [theme] = useState<"light">(
+    (localStorage.getItem("vc_theme") as "light") || "light"
   );
 
   const navigate = useNavigate();
@@ -220,21 +220,18 @@ export default function App() {
 
 
         <nav style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-          <button className="btn-secondary" onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}>
-            {theme === "light" ? "🌙 Dark" : "☀️ Light"}
-          </button>
-          <Link to="/">Feed</Link>
-          <Link to="/create">Create</Link>
-          <Link to="/plan">Meal Plan</Link>
-          <Link to="/me">My Account</Link>
-          {userEmail ? (
+        <Link to="/">Feed</Link>
+        <Link to="/create">Create</Link>
+        <Link to="/plan">Meal Plan</Link>
+        <Link to="/me">My Account</Link>
+        {userEmail ? (
             <>
-              <img className="avatar" src={avatarUrl(profile.avatar_url)} alt="avatar" />
-              <button className="btn" onClick={signOut}>Sign out</button>
+            <img className="avatar" src={avatarUrl(profile.avatar_url)} alt="avatar" />
+            <button className="btn" onClick={signOut}>Sign out</button>
             </>
-          ) : (
+        ) : (
             <Link to="/auth">Sign in</Link>
-          )}
+        )}
         </nav>
       </header>
 
