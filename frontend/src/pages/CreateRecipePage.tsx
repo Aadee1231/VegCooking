@@ -226,7 +226,7 @@ export default function CreateRecipePage() {
   const [steps, setSteps] = useState<Step[]>([{ position: 1, body: "" }]);
   const [lines, setLines] = useState<Line[]>([{ position: 1 }]);
   const [cover, setCover] = useState<File | null>(null);
-  const [existingCoverPath, setExistingCoverPath] = useState<string | null>(null);
+  const [existingCoverPath] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { supabase } from "../lib/supabase";
 
 export type RecipeOpt = { id: number; title: string };
 
@@ -7,14 +6,12 @@ export default function SearchableRecipeSelect({
   value,
   onChange,
   options,
-  currentUserId,
   placeholder,
   disabled,
 }: {
   value: number | null;
   onChange: (id: number | null) => void;
   options: RecipeOpt[];
-  currentUserId: string | null;
   placeholder?: string;
   disabled?: boolean;
 }) {
@@ -34,7 +31,11 @@ export default function SearchableRecipeSelect({
   useEffect(() => {
     if (!open) return;
     function onClick(e: MouseEvent) {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node) && e.target !== inputRef.current) {
+      if (
+        panelRef.current &&
+        !panelRef.current.contains(e.target as Node) &&
+        e.target !== inputRef.current
+      ) {
         setOpen(false);
       }
     }
@@ -67,23 +68,22 @@ export default function SearchableRecipeSelect({
       />
       {open && (
         <div
-            ref={panelRef}
-            className="card"
-            style={{
-                position: "absolute",
-                top: "105%",
-                left: 0,
-                right: 0,
-                zIndex: 10000,           // ✅ keep on top of everything
-                maxHeight: 200,
-                overflowY: "auto",
-                marginTop: 2,
-                background: "#fff",      // ✅ make sure it doesn’t blend
-                boxShadow: "0 4px 8px rgba(0,0,0,0.15)", // ✅ add subtle shadow
-                borderRadius: "8px",
-            }}
+          ref={panelRef}
+          className="card"
+          style={{
+            position: "absolute",
+            top: "105%",
+            left: 0,
+            right: 0,
+            zIndex: 10000,
+            maxHeight: 200,
+            overflowY: "auto",
+            marginTop: 2,
+            background: "#fff",
+            boxShadow: "0 4px 8px rgba(0,0,0,0.15)",
+            borderRadius: "8px",
+          }}
         >
-
           {filtered.length ? (
             filtered.map((r) => (
               <div
