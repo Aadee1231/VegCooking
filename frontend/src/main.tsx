@@ -11,6 +11,9 @@ import RecipeDetailPage from './pages/RecipeDetailPage';
 import MyAccountPage from './pages/MyAccountPage';
 import UserProfilePage from './pages/UserProfilePage';   // NEW
 import './index.css';
+import { createRoot } from "react-dom/client";
+
+createRoot(document.getElementById("root")!).render(<App />);
 
 const router = createBrowserRouter([
   {
