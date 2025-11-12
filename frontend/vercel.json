@@ -3,6 +3,10 @@
     {
       "source": "/api/(.*)",
       "destination": "https://vegcooking-backend--fastapi-app.modal.run/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
