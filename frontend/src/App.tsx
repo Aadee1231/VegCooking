@@ -136,63 +136,88 @@ export default function App() {
           <h1 className="brand">VegCooking</h1>
         </Link>
 
-        {/* Search Bar */}
-        <div style={{ position: "relative", flex: "0 1 480px" }}>
-          <input
-            type="text"
-            placeholder="Search recipes, users, or tags..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setTimeout(() => setFocused(false), 180)}
-            style={{ width: "100%" }}
-          />
-          {focused && results.length > 0 && (
-            <div
-              className="card fade-in"
-              style={{
-                position: "absolute",
-                top: "105%",
-                left: 0,
-                right: 0,
-                zIndex: 200,
-                borderRadius: 12,
-              }}
-            >
-              {results.map((r) => (
-                <Link
-                  key={`${r.type}-${r.id}`}
-                  to={r.type === "recipe" ? `/r/${r.id}` : r.type === "user" ? `/u/${r.id}` : `/?tag=${encodeURIComponent(r.id)}`}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: "10px 12px",
-                    borderBottom: "1px solid #eaeaea",
-                  }}
-                  onClick={() => setSearch("")}
-                >
-                  {r.image && (
-                    <img
-                      src={r.type === "user" ? avatarUrl(r.image)! : imgUrl(r.image)!}
-                      alt=""
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: r.type === "user" ? "50%" : 8,
-                        objectFit: "cover",
-                      }}
-                    />
-                  )}
-                  <div>
-                    <strong>{r.title}</strong>
-                    {r.subtitle && <div style={{ fontSize: ".8rem", color: "#777" }}>{r.subtitle}</div>}
-                  </div>
-                </Link>
-              ))}
+        {/* --- Mobile iOS-style search (phones only) --- */}
+        <div className="ios-searchbar">
+            <i className="ri-search-line"></i>
+            <input
+                type="text"
+                placeholder="Search recipes, users, or tags"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onFocus={() => setFocused(true)}
+                onBlur={() => setTimeout(() => setFocused(false), 180)}
+            />
             </div>
-          )}
+
+            {/* --- Desktop search (hidden on mobile) --- */}
+            <div className="desktop-search" style={{ position: "relative", flex: "0 1 480px" }}>
+            <input
+                type="text"
+                placeholder="Search recipes, users, or tags..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onFocus={() => setFocused(true)}
+                onBlur={() => setTimeout(() => setFocused(false), 180)}
+                style={{ width: "100%" }}
+            />
+            {focused && results.length > 0 && (
+                <div
+                className="search-dropdown"
+                style={{
+                    position: "absolute",
+                    top: "105%",
+                    left: 0,
+                    right: 0,
+                    zIndex: 200,
+                    borderRadius: 12,
+                }}
+                >
+                {results.map((r) => (
+                    <Link
+                    key={`${r.type}-${r.id}`}
+                    to={
+                        r.type === "recipe"
+                        ? `/r/${r.id}`
+                        : r.type === "user"
+                        ? `/u/${r.id}`
+                        : `/?tag=${encodeURIComponent(r.id)}`
+                    }
+                    style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        padding: "10px 12px",
+                        borderBottom: "1px solid #eaeaea",
+                    }}
+                    className="search-item"
+                    onClick={() => setSearch("")}
+                    >
+                    {r.image && (
+                        <img
+                        src={r.type === "user" ? avatarUrl(r.image)! : imgUrl(r.image)!}
+                        alt=""
+                        style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: r.type === "user" ? "50%" : 8,
+                            objectFit: "cover",
+                        }}
+                        />
+                    )}
+                    <div>
+                        <strong>{r.title}</strong>
+                        {r.subtitle && (
+                        <div style={{ fontSize: ".8rem", color: "#777" }}>
+                            {r.subtitle}
+                        </div>
+                        )}
+                    </div>
+                    </Link>
+                ))}
+                </div>
+            )}
         </div>
+
 
         <nav style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
           <button className="btn-secondary" onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}>

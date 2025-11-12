@@ -330,32 +330,162 @@ button.active-tag {
   transform: scale(1.05);
 }
 
-/* === DEVICE-BASED VISIBILITY FIX === */
 
-/* Show iOS nav + mobile search ONLY on real mobile (≤640px width) */
+/* === iOS SEARCH BAR === */
+.ios-searchbar {
+  display: none; /* hidden by default */
+  width: 92%;
+  max-width: 480px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.06);
+  padding: 8px 14px;
+  font-size: 0.95rem;
+  transition: all 0.25s ease;
+  backdrop-filter: blur(8px);
+}
+
+.ios-searchbar i {
+  font-size: 1.2rem;
+  color: var(--muted);
+  margin-right: 8px;
+}
+
+.ios-searchbar input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 1rem;
+  color: var(--text);
+  padding: 6px 0;
+}
+
+.ios-searchbar input:focus {
+  outline: none;
+}
+
+/* dark mode */
+:root[data-theme="dark"] .ios-searchbar {
+  background: rgba(18, 20, 24, 0.8);
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .ios-searchbar i {
+  color: var(--muted);
+}
+
+/* === RESPONSIVE VISIBILITY === */
 @media screen and (max-width: 640px) {
-  .mobile-nav {
-    display: flex;
-  }
   .ios-searchbar {
-    display: flex;
+    display: flex !important;
   }
-  /* Hide desktop header nav + search */
-  header nav,
-  header > div[style] {
+  .mobile-nav {
+    display: flex !important;
+  }
+  .desktop-search {
     display: none !important;
+  }
+  header nav {
+    display: none !important;
+  }
+  .app-layout {
+    padding-bottom: 90px;
   }
 }
 
-/* Hide iOS nav + search bar on tablets/desktops */
 @media screen and (min-width: 641px) {
-  .mobile-nav,
-  .ios-searchbar {
+  .ios-searchbar,
+  .mobile-nav {
     display: none !important;
   }
-  header nav,
-  header > div[style] {
+  .desktop-search {
+    display: block !important;
+  }
+  header nav {
     display: flex !important;
   }
 }
 
+/* === iOS-STYLE SEARCH DROPDOWN (global for both App.tsx + SearchableRecipeSelect) === */
+.search-dropdown {
+  position: absolute;
+  top: 105%;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  max-height: 260px;
+  overflow-y: auto;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(230, 230, 230, 0.6);
+  animation: fadeIn 0.25s ease both;
+}
+
+.search-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+.search-dropdown::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+}
+
+/* Each row */
+.search-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+  border-bottom: 1px solid rgba(240, 240, 240, 0.6);
+}
+
+.search-item:last-child {
+  border-bottom: none;
+}
+
+.search-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+  transform: scale(1.01);
+}
+
+.search-item img {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+/* Text inside dropdown */
+.search-item strong {
+  font-size: 0.95rem;
+  color: var(--text);
+}
+.search-item small {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* Dark mode */
+:root[data-theme="dark"] .search-dropdown {
+  background: rgba(25, 27, 33, 0.85);
+  border: 1px solid rgba(60, 60, 60, 0.7);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
+}
+:root[data-theme="dark"] .search-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}

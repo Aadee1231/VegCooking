@@ -69,7 +69,7 @@ export default function SearchableRecipeSelect({
       {open && (
         <div
           ref={panelRef}
-          className="card"
+          className="search-dropdown"
           style={{
             position: "absolute",
             top: "105%",
@@ -88,6 +88,7 @@ export default function SearchableRecipeSelect({
             filtered.map((r) => (
               <div
                 key={r.id}
+                className="search-item"
                 onClick={() => {
                   onChange(r.id);
                   setOpen(false);
@@ -103,7 +104,9 @@ export default function SearchableRecipeSelect({
               </div>
             ))
           ) : (
-            <div style={{ padding: 8, color: "#777", fontSize: "0.8rem" }}>No matches</div>
+            <div style={{ padding: 10, textAlign: "center", color: "#777", fontSize: "0.85rem" }}>
+                No matches
+            </div>
           )}
         </div>
       )}
