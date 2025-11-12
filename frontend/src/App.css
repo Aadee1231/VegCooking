@@ -286,6 +286,7 @@ button.active-tag {
 
 /* === iOS-STYLE MOBILE NAV === */
 .mobile-nav {
+  display: none; /* hidden by default */
   position: fixed;
   bottom: 12px;
   left: 50%;
@@ -295,14 +296,14 @@ button.active-tag {
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(12px);
   border-radius: 22px;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.15);
-  display: flex;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
   justify-content: space-around;
   align-items: center;
   padding: 8px 0;
   z-index: 200;
   border: 1px solid var(--line);
 }
+
 
 .mobile-nav a {
   flex: 1;
@@ -329,34 +330,32 @@ button.active-tag {
   transform: scale(1.05);
 }
 
-/* Dark theme support */
-:root[data-theme="dark"] .mobile-nav {
-  background: rgba(20, 22, 25, 0.75);
-  border: 1px solid var(--line);
-  box-shadow: 0 4px 14px rgba(0,0,0,0.6);
-}
+/* === DEVICE-BASED VISIBILITY FIX === */
 
-:root[data-theme="dark"] .mobile-nav a {
-  color: var(--muted);
-}
-
-:root[data-theme="dark"] .mobile-nav a.active {
-  color: var(--brand);
-}
-
-/* Hide mobile nav on desktop */
-@media (min-width: 769px) {
+/* Show iOS nav + mobile search ONLY on real mobile (≤640px width) */
+@media screen and (max-width: 640px) {
   .mobile-nav {
-    display: none;
+    display: flex;
   }
-}
-
-/* Hide desktop header nav on mobile */
-@media (max-width: 768px) {
-  header nav {
+  .ios-searchbar {
+    display: flex;
+  }
+  /* Hide desktop header nav + search */
+  header nav,
+  header > div[style] {
     display: none !important;
   }
-  .app-layout {
-    padding-bottom: 90px; /* spacing so content isn’t hidden behind nav */
+}
+
+/* Hide iOS nav + search bar on tablets/desktops */
+@media screen and (min-width: 641px) {
+  .mobile-nav,
+  .ios-searchbar {
+    display: none !important;
+  }
+  header nav,
+  header > div[style] {
+    display: flex !important;
   }
 }
+
