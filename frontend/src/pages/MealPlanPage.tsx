@@ -22,7 +22,7 @@ export default function MealPlanPage() {
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(new Date()));
   const [plans, setPlans] = useState<PlanRow[]>([]);
   const [recipes, setRecipes] = useState<RecipeOpt[]>([]);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [, setUserId] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [editingText, setEditingText] = useState<Record<string, string>>({});
 
@@ -317,15 +317,14 @@ export default function MealPlanPage() {
                           <>
                             <div style={{ width: "100%", flex: 1 }}>
                               <SearchableRecipeSelect
-                                value={cell?.recipe_id ?? null}
-                                onChange={(rid) =>
-                                  saveCell(d, meal, { recipe_id: rid, external_name: null, location: "home" })
-                                }
-                                options={recipes}
-                                currentUserId={userId}
-                                placeholder="Choose..."
-                                disabled={busy}
-                              />
+                                  value={cell?.recipe_id ?? null}
+                                  onChange={(rid) => {
+                                    void saveCell(d, meal, { recipe_id: rid, external_name: null, location: "home" });
+                                  }}
+                                  options={recipes}
+                                  placeholder="Choose..."
+                                  disabled={busy}
+                                />
                             </div>
                             {cell?.recipe_id && (
                               <Link
