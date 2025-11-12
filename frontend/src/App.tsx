@@ -230,6 +230,26 @@ export default function App() {
         </div>
       </main>
 
+      {/* --- MOBILE NAV BAR (iOS-style) --- */}
+      <nav className="mobile-nav">
+        <Link to="/" className={location.pathname === "/" ? "active" : ""}>
+            <i className="ri-home-5-line"></i>
+            <span>Feed</span>
+        </Link>
+        <Link to="/create" className={location.pathname.startsWith("/create") ? "active" : ""}>
+            <i className="ri-add-circle-line"></i>
+            <span>Create</span>
+        </Link>
+        <Link to="/plan" className={location.pathname.startsWith("/plan") ? "active" : ""}>
+            <i className="ri-calendar-line"></i>
+            <span>Meal</span>
+        </Link>
+        <Link to="/me" className={location.pathname.startsWith("/me") ? "active" : ""}>
+            <i className="ri-user-3-line"></i>
+            <span>Account</span>
+        </Link>
+      </nav>
+
       <footer>© {new Date().getFullYear()} VegCooking — Share & Explore Recipes</footer>
     </>
   );

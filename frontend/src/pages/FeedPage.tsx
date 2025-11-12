@@ -22,6 +22,7 @@ type Recipe = {
 
 type Profile = { id: string; username: string | null; avatar_url: string | null };
 
+
 const CATEGORIES = [
   { label: "All", emoji: "🍽️", tag: "ALL" },
   { label: "Vegan", emoji: "🥦", tag: "Vegan" },
@@ -45,16 +46,30 @@ export default function FeedPage() {
   const [liking, setLiking] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string>("");
+  const [likedRecipes, setLikedRecipes] = useState<number[]>([]);
 
   function showToast(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(""), 2500);
   }
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
-    loadFeed(null);
-  }, []);
+    useEffect(() => {
+    (async () => {
+        const { data } = await supabase.auth.getUser();
+        const uid = data.user?.id ?? null;
+        setUserId(uid);
+        await loadFeed(null);
+        if (uid) await loadUserLikes(uid);
+    })();
+    }, []);
+
+    async function loadUserLikes(uid: string) {
+        const { data } = await supabase
+            .from("likes")
+            .select("recipe_id")
+            .eq("user_id", uid);
+        setLikedRecipes((data ?? []).map((r) => r.recipe_id));
+    }
 
   async function loadFeed(tag: string | null) {
     setLoading(true);
@@ -87,31 +102,36 @@ export default function FeedPage() {
     if (!userId) return showToast("Sign in to like");
     setLiking(recipeId);
     try {
-      const { error } = await supabase
-        .from("likes")
-        .insert({ user_id: userId, recipe_id: recipeId });
-      if (error) {
+        const alreadyLiked = likedRecipes.includes(recipeId);
+
+        if (alreadyLiked) {
         await supabase
-          .from("likes")
-          .delete()
-          .eq("user_id", userId)
-          .eq("recipe_id", recipeId);
+            .from("likes")
+            .delete()
+            .eq("user_id", userId)
+            .eq("recipe_id", recipeId);
+        setLikedRecipes((prev) => prev.filter((id) => id !== recipeId));
         showToast("Like removed ❤️‍🩹");
-      } else {
+        } else {
+        await supabase.from("likes").insert({ user_id: userId, recipe_id: recipeId });
+        setLikedRecipes((prev) => [...prev, recipeId]);
         showToast("Liked ❤️");
-      }
-      const { data } = await supabase
+        }
+
+        // Update recipe stats
+        const { data } = await supabase
         .from("public_recipes_with_stats")
         .select("*")
         .eq("id", recipeId)
         .single();
-      setItems((prev) =>
+        setItems((prev) =>
         prev.map((r) => (r.id === recipeId ? (data as Recipe) : r))
-      );
+        );
     } finally {
-      setLiking(null);
+        setLiking(null);
     }
   }
+
 
   async function addToMyRecipes(recipeId: number, ownerId: string) {
     if (!userId) return showToast("Sign in to add");

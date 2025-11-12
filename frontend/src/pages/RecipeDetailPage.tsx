@@ -46,6 +46,9 @@ export default function RecipeDetailPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [newComment, setNewComment] = useState("");
   const [commentLikes, setCommentLikes] = useState<Record<number, number>>({});
+  const [isRecipeLiked, setIsRecipeLiked] = useState(false);
+  const [likedComments, setLikedComments] = useState<number[]>([]);
+
 
   const avatarUrl = (p: string | null) =>
     p ? supabase.storage.from("profile-avatars").getPublicUrl(p).data.publicUrl : "/default-avatar.svg";
@@ -150,24 +153,32 @@ export default function RecipeDetailPage() {
     setComments((prev) => prev.filter((x) => x.id !== commentId));
     showToast("Comment deleted");
   }
-
   async function likeRecipe() {
     if (!currentUserId || !recipe) return showToast("Sign in first!");
     setLiking(true);
     try {
-      const { error } = await supabase.from("likes").insert({ user_id: currentUserId, recipe_id: recipe.id });
-      if (error) {
-        await supabase.from("likes").delete().eq("user_id", currentUserId).eq("recipe_id", recipe.id);
+        if (isRecipeLiked) {
+        await supabase
+            .from("likes")
+            .delete()
+            .eq("user_id", currentUserId)
+            .eq("recipe_id", recipe.id);
+        setIsRecipeLiked(false);
         setLikeCount((c) => Math.max(0, c - 1));
-        showToast("Like removed");
-      } else {
+        showToast("Like removed ❤️‍🩹");
+        } else {
+        await supabase
+            .from("likes")
+            .insert({ user_id: currentUserId, recipe_id: recipe.id });
+        setIsRecipeLiked(true);
         setLikeCount((c) => c + 1);
-        showToast("Liked!");
-      }
+        showToast("Liked ❤️");
+        }
     } finally {
-      setLiking(false);
+        setLiking(false);
     }
   }
+
 
   async function addRecipe() {
     if (!currentUserId || !recipe) return showToast("Sign in first!");
@@ -293,7 +304,16 @@ export default function RecipeDetailPage() {
         ) : (
           <>
             <button className="btn" disabled={liking} onClick={likeRecipe}>
-              ♥ {liking ? "…" : likeCount}
+            <span
+                style={{
+                color: isRecipeLiked ? "red" : "#999",
+                fontSize: "1.2rem",
+                transition: "color 0.2s ease",
+                }}
+            >
+                ♥
+            </span>{" "}
+            {likeCount}
             </button>
             <button className="btn btn-secondary" disabled={adding} onClick={addRecipe}>
               ➕ Add
