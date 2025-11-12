@@ -43,14 +43,18 @@ export default function AuthPage() {
   return (
     <div
       style={{
-        minHeight: "100vh",
+        position: "fixed",           // ✅ full-screen takeover
+        top: 0,
+        left: 0,
+        width: "100vw",              // ✅ fill entire width
+        height: "100vh",             // ✅ fill entire height
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         background: "linear-gradient(135deg, #e8f5e9, #c8e6c9, #a5d6a7)",
         backgroundSize: "200% 200%",
         animation: "gradientShift 10s ease infinite",
-        padding: "2rem",
+        zIndex: 9999,                // ✅ sits above layout/navbar
       }}
     >
       <div
