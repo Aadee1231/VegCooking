@@ -16,10 +16,14 @@ export default function AuthPage() {
     try {
       if (isSignup) {
         const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { data: { username } },
+            email,
+            password,
+            options: {
+                data: { username },
+                emailRedirectTo: "https://veg-cooking.vercel.app/me",
+            },
         });
+
         if (error) throw error;
         if (data.user) {
           await supabase.from("profiles").insert({

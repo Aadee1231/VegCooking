@@ -53,6 +53,21 @@ export default function App() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const type = url.searchParams.get("type");
+
+    // If coming back from email confirmation
+    if (type === "signup") {
+        supabase.auth.getSession().then(({ data }) => {
+        if (data?.session?.user) {
+            navigate("/me");
+        }
+        });
+    }
+  }, []);
+
+
   // === SEARCH FUNCTIONALITY ===
   useEffect(() => {
     if (!search.trim()) {
