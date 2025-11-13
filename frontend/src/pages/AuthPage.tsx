@@ -15,7 +15,7 @@ export default function AuthPage() {
     setLoading(true);
     try {
       if (isSignup) {
-        const { data, error } = await supabase.auth.signUp({
+        const { error } = await supabase.auth.signUp({
             email,
             password,
             options: {
@@ -25,12 +25,6 @@ export default function AuthPage() {
         });
 
         if (error) throw error;
-        if (data.user) {
-          await supabase.from("profiles").insert({
-            id: data.user.id,
-            username,
-          });
-        }
         alert("Check your email for verification!");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
