@@ -33,25 +33,62 @@ export default function App() {
   }, [theme]);
 
   // Session + Profile
-  useEffect(() => {
-    supabase.auth.getSession().then(async ({ data }) => {
-      const email = data.session?.user?.email ?? null;
-      const uid = data.session?.user?.id ?? null;
-      setUserEmail(email);
-      if (uid) {
+    useEffect(() => {
+    async function loadInitialSession() {
+        const { data } = await supabase.auth.getSession();
+        const session = data.session;
+
+        if (session?.user) {
+        setUserEmail(session.user.email ?? null);
+
+        // Fetch profile
         const { data: p } = await supabase
-          .from("profiles")
-          .select("username, avatar_url")
-          .eq("id", uid)
-          .single();
+            .from("profiles")
+            .select("username, avatar_url")
+            .eq("id", session.user.id)
+            .single();
+
         if (p) setProfile(p);
-      }
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserEmail(session?.user?.email ?? null);
-    });
+        }
+    }
+
+    loadInitialSession();
+
+    // Handle auth changes (signup → verify → login)
+    const { data: sub } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+        console.log("Auth event:", event);
+
+        if (event === "SIGNED_IN") {
+            console.log("SIGNED IN!");
+            setUserEmail(session?.user?.email ?? null);
+
+            // Fetch profile again
+            if (session?.user) {
+            const { data: p } = await supabase
+                .from("profiles")
+                .select("username, avatar_url")
+                .eq("id", session.user.id)
+                .single();
+
+            if (p) setProfile(p);
+            }
+
+            // Redirect to account page **after email verification**
+            window.location.href = "/account";
+        }
+
+        // Token refreshed (mobile or returning user)
+        if (event === "TOKEN_REFRESHED") {
+            console.log("TOKEN REFRESHED");
+            setUserEmail(session?.user?.email ?? null);
+        }
+        }
+    );
+
     return () => sub.subscription.unsubscribe();
-  }, []);
+    }, []);
+
 
   // === SEARCH FUNCTIONALITY ===
   useEffect(() => {

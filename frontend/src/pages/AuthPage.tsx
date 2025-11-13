@@ -19,7 +19,7 @@ export default function AuthPage() {
           email,
           password,
           options: { 
-            emailRedirectTo: 'https://veg-cooking.vercel.app/account',
+            emailRedirectTo: 'https://veg-cooking.vercel.app/auth/callback',
             data: { username } 
           },
         });
