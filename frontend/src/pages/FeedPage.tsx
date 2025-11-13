@@ -121,7 +121,7 @@ export default function FeedPage() {
         // Update recipe stats
         const { data } = await supabase
         .from("public_recipes_with_stats")
-        .select("*")
+        .select("*") 
         .eq("id", recipeId)
         .single();
         setItems((prev) =>
