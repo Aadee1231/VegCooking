@@ -226,7 +226,7 @@ export default function CreateRecipePage() {
   const [steps, setSteps] = useState<Step[]>([{ position: 1, body: "" }]);
   const [lines, setLines] = useState<Line[]>([{ position: 1 }]);
   const [cover, setCover] = useState<File | null>(null);
-  const [existingCoverPath, setExistingCoverPath] = useState<string | null>(null);
+  const [existingCoverPath] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -244,74 +244,6 @@ export default function CreateRecipePage() {
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
   }, []);
-
-  /* ---------- LOAD EXISTING RECIPE WHEN EDITING ---------- */
-    useEffect(() => {
-    async function loadExisting() {
-        if (!editing || !id) return;
-
-        const { data: rec } = await supabase
-        .from("recipes")
-        .select(
-            `id, title, caption, description, servings, is_public, tags, prep_time, cook_time, difficulty, image_url`
-        )
-        .eq("id", id)
-        .single();
-
-        if (!rec) return;
-
-        // Set basic fields
-        setTitle(rec.title || "");
-        setCaption(rec.caption || "");
-        setDescription(rec.description || "");
-        setServings(rec.servings ?? "");
-        setIsPublic(rec.is_public ?? false);
-        setTags(rec.tags || []);
-        setPrepTime(rec.prep_time || "");
-        setCookTime(rec.cook_time || "");
-        setDifficulty(rec.difficulty || "");
-
-        // Load existing cover
-        if (rec.image_url) {
-        setExistingCoverPath(rec.image_url);
-        }
-
-        // Load ingredients
-        const { data: ing } = await supabase
-        .from("recipe_ingredients")
-        .select("position, quantity, unit_code, notes, ingredients(id, name)")
-        .eq("recipe_id", id)
-        .order("position");
-
-        if (ing) {
-        setLines(
-            ing.map((r: any, idx: number) => ({
-            position: idx + 1,
-            ingredient: r.ingredients
-                ? { id: r.ingredients.id, name: r.ingredients.name, created_by: r.ingredients.created_by }
-                : null,
-            quantity: r.quantity,
-            unit_code: r.unit_code,
-            notes: r.notes,
-            }))
-        );
-        }
-
-        // Load steps
-        const { data: st } = await supabase
-        .from("recipe_steps")
-        .select("position, body")
-        .eq("recipe_id", id)
-        .order("position");
-
-        if (st) {
-        setSteps(st.map((s: any) => ({ position: s.position, body: s.body })));
-        }
-    }
-
-    loadExisting();
-    }, [editing, id]);
-
 
   async function saveRecipe() {
     try {

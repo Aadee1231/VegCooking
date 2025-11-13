@@ -18,10 +18,7 @@ export default function AuthPage() {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { 
-            emailRedirectTo: 'https://veg-cooking.vercel.app/auth/callback',
-            data: { username } 
-          },
+          options: { data: { username } },
         });
         if (error) throw error;
         if (data.user) {
