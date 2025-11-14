@@ -8,34 +8,53 @@ export default function AuthPage() {
   const [isSignup, setIsSignup] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  async function handleAuth(e: React.FormEvent) {
+    async function handleAuth(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
+
     if (isSignup) {
+        // SIGN UP
         const { error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
+        email,
+        password,
+        options: {
             data: { username },
             emailRedirectTo: "https://veg-cooking.vercel.app/me",
-            },
+        },
         });
 
-        if (error) {
-            if (error.message.includes("already registered")) {
-            alert("This email is already registered. Try signing in instead.");
-            } else {
-            alert(error.message || "Sign up failed");
-            }
-            return;
-        }
+        setLoading(false);
 
-        // ✅ DO NOT manually insert into `profiles` anymore.
-        // The database trigger (handle_new_user) does this automatically.
+        if (error) {
+        if (error.message.includes("already registered")) {
+            alert("This email is already registered. Try signing in instead.");
+        } else {
+            alert(error.message || "Sign up failed");
+        }
+        return;
+        }
 
         alert("Check your email to confirm your account!");
-        }
+        return;
     }
+
+    // SIGN IN (THIS WAS MISSING!!!)
+    const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+    });
+
+    setLoading(false);
+
+    if (error) {
+        alert(error.message || "Sign in failed");
+        return;
+    }
+
+    // success!
+    window.location.href = "/";
+    }
+
 
   return (
     <div

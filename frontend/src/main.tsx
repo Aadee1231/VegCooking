@@ -14,10 +14,6 @@ import UserProfilePage from './pages/UserProfilePage';
 
 import './index.css';
 
-// ❌ DELETE THIS — causes your entire app to crash
-// createRoot(document.getElementById("root")!).render(<App />);
-
-// ✅ ONLY USE THE ROUTER BELOW
 const router = createBrowserRouter([
   {
     path: '/',
