@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+
 import App from './App';
 import AuthPage from './pages/AuthPage';
 import FeedPage from './pages/FeedPage';
@@ -9,12 +10,14 @@ import MealPlanPage from './pages/MealPlanPage';
 import GroceriesPage from './pages/GroceriesPage';
 import RecipeDetailPage from './pages/RecipeDetailPage';
 import MyAccountPage from './pages/MyAccountPage';
-import UserProfilePage from './pages/UserProfilePage';   // NEW
+import UserProfilePage from './pages/UserProfilePage';
+
 import './index.css';
-import { createRoot } from "react-dom/client";
 
-createRoot(document.getElementById("root")!).render(<App />);
+// ❌ DELETE THIS — causes your entire app to crash
+// createRoot(document.getElementById("root")!).render(<App />);
 
+// ✅ ONLY USE THE ROUTER BELOW
 const router = createBrowserRouter([
   {
     path: '/',
@@ -28,7 +31,7 @@ const router = createBrowserRouter([
       { path: 'groceries', element: <GroceriesPage /> },
       { path: 'r/:id', element: <RecipeDetailPage /> },
       { path: 'me', element: <MyAccountPage /> },
-      { path: 'u/:id', element: <UserProfilePage /> },   // NEW
+      { path: 'u/:id', element: <UserProfilePage /> },
     ],
   },
 ]);
@@ -36,5 +39,5 @@ const router = createBrowserRouter([
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <RouterProvider router={router} />
-  </React.StrictMode>,
+  </React.StrictMode>
 );
