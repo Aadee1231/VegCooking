@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
-import { useNavigate } from "react-router-dom";
 
 export default function AuthPage() {
   const [email, setEmail] = useState("");
@@ -8,35 +7,35 @@ export default function AuthPage() {
   const [username, setUsername] = useState("");
   const [isSignup, setIsSignup] = useState(false);
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
 
   async function handleAuth(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    try {
-      if (isSignup) {
+    if (isSignup) {
         const { error } = await supabase.auth.signUp({
             email,
             password,
             options: {
-                data: { username },
-                emailRedirectTo: "https://veg-cooking.vercel.app/me",
+            data: { username },
+            emailRedirectTo: "https://veg-cooking.vercel.app/me",
             },
         });
 
-        if (error) throw error;
-        alert("Check your email for verification!");
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        navigate("/");
-      }
-    } catch (err: any) {
-      alert(err.message ?? "Auth failed");
-    } finally {
-      setLoading(false);
+        if (error) {
+            if (error.message.includes("already registered")) {
+            alert("This email is already registered. Try signing in instead.");
+            } else {
+            alert(error.message || "Sign up failed");
+            }
+            return;
+        }
+
+        // ✅ DO NOT manually insert into `profiles` anymore.
+        // The database trigger (handle_new_user) does this automatically.
+
+        alert("Check your email to confirm your account!");
+        }
     }
-  }
 
   return (
     <div
