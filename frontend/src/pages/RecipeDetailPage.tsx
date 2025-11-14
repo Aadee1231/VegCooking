@@ -297,9 +297,9 @@ export default function RecipeDetailPage() {
             <button className="btn" disabled={liking} onClick={likeRecipe}>
             <span
                 style={{
-                color: isRecipeLiked ? "red" : "#999",
-                fontSize: "1.2rem",
-                transition: "color 0.2s ease",
+                    color: isRecipeLiked ? "red" : "#bbb",
+                    transition: "0.2s",
+                    fontSize: "1.35rem",
                 }}
             >
                 ♥

@@ -394,13 +394,13 @@ export default function CreateRecipePage() {
      UI RENDER
      ------------------------------------------------------------- */
   return (
-    <div className="fade-in" style={{ maxWidth: 960, margin: "0 auto", padding: "2rem 1rem" }}>
+    <div className="fade-in" style={{ maxWidth: 900, margin: "0 auto", padding: "2rem 1rem" }}>
 
       <h2 style={{ textAlign: "center", color: "var(--brand)", fontSize: "1.9rem", fontWeight: 800 }}>
         {editing ? "Edit Recipe" : "Create Recipe"}
       </h2>
 
-      <div className="card" style={{ padding: "1.6rem", borderRadius: 16, boxShadow: "0 4px 14px rgba(0,0,0,.08)" }}>
+      <div className="card" style={{ padding: "1.8rem", borderRadius: 18, display: "flex", flexDirection: "column", gap: "1rem", boxShadow: "0 4px 14px rgba(0,0,0,.08)" }}>
         {/* BASIC INFO */}
         <label style={labelStyle}>Title *</label>
         <input value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} />

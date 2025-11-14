@@ -257,6 +257,8 @@ export default function FeedPage() {
                   justifyContent: "space-between",
                   boxShadow: "var(--shadow-md)",
                   transition: "transform .2s ease",
+                  padding: "0 0 0.3rem 0",
+                  marginBottom: "0.4rem",
                 }}
               >
                 <Link to={`/r/${r.id}`} style={{ position: "relative" }}>
@@ -274,7 +276,7 @@ export default function FeedPage() {
                   )}
                 </Link>
 
-                <div style={{ padding: "1rem" }}>
+                <div style={{ padding: "1.2rem 1.1 rem" }}>
                   <h3
                     style={{
                       color: "var(--brand)",
@@ -324,9 +326,10 @@ export default function FeedPage() {
                       style={{ padding: "6px 10px" }}
                     >
                       <Heart
-                        size={16}
-                        fill={liking === r.id ? "var(--brand)" : "none"}
-                        color="white"
+                        size={18}
+                        fill={likedRecipes.includes(r.id) ? "red" : "none"}
+                        color={likedRecipes.includes(r.id) ? "red" : "#aaa"}
+                        style={{ transition: "0.2s" }}
                       />{" "}
                       {r.likes_count}
                     </button>

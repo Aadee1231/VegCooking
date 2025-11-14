@@ -259,7 +259,8 @@ export default function MealPlanPage() {
                     padding: "12px 10px",
                     borderRight: "1px solid #ddd",
                     fontSize: "1rem",
-                    textAlign: "left",
+                    textAlign: "center",
+                    fontWeight: 700,
                   }}
                 >
                   {meal}
