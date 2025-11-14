@@ -2,6 +2,7 @@ import { Outlet, Link, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import "./App.css";
+import GlobalToast from "./components/Toast";
 
 type SearchResult = {
   id: number | string;
@@ -10,6 +11,12 @@ type SearchResult = {
   subtitle?: string;
   image?: string | null;
 };
+
+declare global {
+  interface Window {
+    vcToast: (msg: string) => void;
+  }
+}
 
 export default function App() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -20,6 +27,7 @@ export default function App() {
   const [theme] = useState<"light">(
     (localStorage.getItem("vc_theme") as "light") || "light"
   );
+  const [toast, setToast] = useState("");
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -144,6 +152,11 @@ export default function App() {
     return supabase.storage.from("recipe-media").getPublicUrl(path).data.publicUrl;
   }
 
+  function showToast(msg: string) {
+    setToast(msg);
+  }
+  window.vcToast = showToast;
+  
   return (
     <>
       <header>
@@ -288,6 +301,7 @@ export default function App() {
       </nav>
 
       <footer>© {new Date().getFullYear()} VegCooking — Share & Explore Recipes</footer>
+      <GlobalToast message={toast} clear={() => setToast("")} />
     </>
   );
 }

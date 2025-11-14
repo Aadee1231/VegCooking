@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
-import { Toast } from "../components/Toast";
 
 type Recipe = {
   id: number;
@@ -42,7 +41,6 @@ export default function RecipeDetailPage() {
   const [posting, setPosting] = useState(false);
   const [liking, setLiking] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [toast, setToast] = useState<string>("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [newComment, setNewComment] = useState("");
   const [commentLikes, setCommentLikes] = useState<Record<number, number>>({});
@@ -62,10 +60,6 @@ export default function RecipeDetailPage() {
     loadRecipe();
   }, [id]);
 
-  function showToast(message: string) {
-    setToast(message);
-    setTimeout(() => setToast(""), 2500);
-  }
 
   async function loadRecipe() {
     setLoading(true);
@@ -136,7 +130,7 @@ export default function RecipeDetailPage() {
   }
 
   async function toggleCommentLike(commentId: number) {
-    if (!currentUserId) return showToast("Sign in first!");
+    if (!currentUserId) return window.vcToast("Sign in first!");
     const { error } = await supabase.from("comment_likes").insert({ comment_id: commentId, user_id: currentUserId });
     if (error) {
       await supabase.from("comment_likes").delete().eq("comment_id", commentId).eq("user_id", currentUserId);
@@ -149,10 +143,10 @@ export default function RecipeDetailPage() {
   async function deleteComment(commentId: number) {
     await supabase.from("comments").delete().eq("id", commentId);
     setComments((prev) => prev.filter((x) => x.id !== commentId));
-    showToast("Comment deleted");
+    window.vcToast("Comment deleted");
   }
   async function likeRecipe() {
-    if (!currentUserId || !recipe) return showToast("Sign in first!");
+    if (!currentUserId || !recipe) return window.vcToast("Sign in first!");
     setLiking(true);
     try {
         if (isRecipeLiked) {
@@ -163,14 +157,14 @@ export default function RecipeDetailPage() {
             .eq("recipe_id", recipe.id);
         setIsRecipeLiked(false);
         setLikeCount((c) => Math.max(0, c - 1));
-        showToast("Like removed ❤️‍🩹");
+        window.vcToast("Like removed ❤️‍🩹");
         } else {
         await supabase
             .from("likes")
             .insert({ user_id: currentUserId, recipe_id: recipe.id });
         setIsRecipeLiked(true);
         setLikeCount((c) => c + 1);
-        showToast("Liked ❤️");
+        window.vcToast("Liked ❤️");
         }
     } finally {
         setLiking(false);
@@ -179,24 +173,24 @@ export default function RecipeDetailPage() {
 
 
   async function addRecipe() {
-    if (!currentUserId || !recipe) return showToast("Sign in first!");
-    if (recipe.user_id === currentUserId) return showToast("You can’t add your own recipe!");
+    if (!currentUserId || !recipe) return window.vcToast("Sign in first!");
+    if (recipe.user_id === currentUserId) return window.vcToast("You can’t add your own recipe!");
     setAdding(true);
     try {
       const { error } = await supabase
         .from("user_added_recipes")
         .insert({ user_id: currentUserId, recipe_id: recipe.id });
       if (error && (error as any).code !== "23505") throw error;
-      showToast("Recipe added to your account!");
+      window.vcToast("Recipe added to your account!");
     } catch {
-      showToast("Already added.");
+      window.vcToast("Already added.");
     } finally {
       setAdding(false);
     }
   }
 
   async function postComment() {
-    if (!currentUserId) return showToast("Sign in first!");
+    if (!currentUserId) return window.vcToast("Sign in first!");
     const body = newComment.trim();
     if (!body) return;
     setPosting(true);
@@ -208,9 +202,9 @@ export default function RecipeDetailPage() {
       });
       setNewComment("");
       await loadComments();
-      showToast("Comment posted!");
+      window.vcToast("Comment posted!");
     } catch {
-      showToast("Failed to post comment.");
+      window.vcToast("Failed to post comment.");
     } finally {
       setPosting(false);
     }
@@ -221,7 +215,6 @@ export default function RecipeDetailPage() {
 
   return (
     <div className="fade-in" style={{ maxWidth: 900, margin: "0 auto 4rem auto" }}>
-      {toast && <Toast msg={toast} />}
 
       {/* --- Hero --- */}
       {recipe.image_url && (

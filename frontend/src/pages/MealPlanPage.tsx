@@ -126,7 +126,7 @@ export default function MealPlanPage() {
         setPlans((prev) => prev.map((p) => (p.id === existing.id ? (updated as any) : p)));
       }
     } catch (e: any) {
-      alert(e.message ?? "Save failed");
+      window.vcToast(e.message ?? "Save failed");
     } finally {
       setSavingKey(null);
     }
@@ -141,7 +141,7 @@ export default function MealPlanPage() {
       await supabase.from("meal_plans").delete().eq("id", c.id);
       setPlans((prev) => prev.filter((p) => p.id !== c.id));
     } catch (e: any) {
-      alert(e.message ?? "Delete failed");
+      window.vcToast(e.message ?? "Delete failed");
     } finally {
       setSavingKey(null);
     }

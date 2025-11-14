@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Heart } from "lucide-react";
-import { Toast } from "../components/Toast";
 
 type Recipe = {
   id: number;
@@ -45,13 +44,7 @@ export default function FeedPage() {
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [liking, setLiking] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState<string>("");
   const [likedRecipes, setLikedRecipes] = useState<number[]>([]);
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(""), 2500);
-  }
 
     useEffect(() => {
     (async () => {
@@ -99,7 +92,7 @@ export default function FeedPage() {
   }
 
   async function toggleLike(recipeId: number) {
-    if (!userId) return showToast("Sign in to like");
+    if (!userId) return window.vcToast("Sign in to like");
     setLiking(recipeId);
     try {
         const alreadyLiked = likedRecipes.includes(recipeId);
@@ -111,11 +104,11 @@ export default function FeedPage() {
             .eq("user_id", userId)
             .eq("recipe_id", recipeId);
         setLikedRecipes((prev) => prev.filter((id) => id !== recipeId));
-        showToast("Like removed ❤️‍🩹");
+        window.vcToast("Like removed ❤️‍🩹");
         } else {
         await supabase.from("likes").insert({ user_id: userId, recipe_id: recipeId });
         setLikedRecipes((prev) => [...prev, recipeId]);
-        showToast("Liked ❤️");
+        window.vcToast("Liked ❤️");
         }
 
         // Update recipe stats
@@ -134,14 +127,14 @@ export default function FeedPage() {
 
 
   async function addToMyRecipes(recipeId: number, ownerId: string) {
-    if (!userId) return showToast("Sign in to add");
-    if (ownerId === userId) return showToast("You can't add your own recipe!");
+    if (!userId) return window.vcToast("Sign in to add");
+    if (ownerId === userId) return window.vcToast("You can't add your own recipe!");
     const { error } = await supabase
       .from("user_added_recipes")
       .insert({ user_id: userId, recipe_id: recipeId });
-    if (error && (error as any).code !== "23505") showToast("Error adding recipe");
-    else if (!error) showToast("Recipe added!");
-    else showToast("Already added.");
+    if (error && (error as any).code !== "23505") window.vcToast("Error adding recipe");
+    else if (!error) window.vcToast("Recipe added!");
+    else window.vcToast("Already added.");
   }
 
   const avatarUrl = (p: string | null) =>
@@ -160,7 +153,6 @@ export default function FeedPage() {
 
   return (
     <div className="fade-in" style={{ padding: "1rem 0" }}>
-      {toast && <Toast msg={toast} />}
 
       {/* ---- CATEGORY SCROLLER ---- */}
       <div

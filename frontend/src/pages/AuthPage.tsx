@@ -27,14 +27,14 @@ export default function AuthPage() {
 
         if (error) {
         if (error.message.includes("already registered")) {
-            alert("This email is already registered. Try signing in instead.");
+            window.vcToast("This email is already registered. Try signing in instead.");
         } else {
-            alert(error.message || "Sign up failed");
+            window.vcToast(error.message || "Sign up failed");
         }
         return;
         }
 
-        alert("Check your email to confirm your account!");
+        window.vcToast("Check your email to confirm your account!");
         return;
     }
 
@@ -47,7 +47,7 @@ export default function AuthPage() {
     setLoading(false);
 
     if (error) {
-        alert(error.message || "Sign in failed");
+        window.vcToast(error.message || "Sign in failed");
         return;
     }
 

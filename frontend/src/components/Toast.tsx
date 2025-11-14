@@ -1,37 +1,40 @@
-// src/components/Toast.tsx
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
-export function Toast({ msg }: { msg: string }) {
-  const [visible, setVisible] = useState(true);
-
+export default function GlobalToast({
+  message,
+  clear,
+}: {
+  message: string;
+  clear: () => void;
+}) {
   useEffect(() => {
-    const timer = setTimeout(() => setVisible(false), 2500);
-    return () => clearTimeout(timer);
-  }, []);
+    if (message) {
+      const t = setTimeout(() => clear(), 2500);
+      return () => clearTimeout(t);
+    }
+  }, [message]);
 
-  if (!visible) return null;
+  if (!message) return null;
 
   return (
     <div
-      className="toast-notify"
       style={{
         position: "fixed",
-        bottom: "60px",
+        top: "50%",
         left: "50%",
-        transform: "translateX(-50%)",
+        transform: "translate(-50%, -50%)",
+        padding: "16px 22px",
         background: "var(--brand)",
         color: "#fff",
-        padding: "14px 24px",
-        borderRadius: "14px",
-        boxShadow: "0 4px 16px rgba(0,0,0,0.3)",
+        borderRadius: 14,
+        fontWeight: 700,
+        zIndex: 999999,
+        boxShadow: "0 14px 40px rgba(0,0,0,.25)",
         fontSize: "1rem",
-        fontWeight: 600,
-        zIndex: 9999,
-        opacity: 0,
-        animation: "toast-fade 3s ease forwards",
+        textAlign: "center",
       }}
     >
-      {msg}
+      {message}
     </div>
   );
 }

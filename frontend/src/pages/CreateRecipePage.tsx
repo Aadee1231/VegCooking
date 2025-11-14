@@ -8,29 +8,6 @@ import {
 } from "../lib/ingredients";
 import { useNavigate, useParams } from "react-router-dom";
 
-/* ---------- Toast ---------- */
-function Toast({ msg }: { msg: string }) {
-  return (
-    <div
-      style={{
-        position: "fixed",
-        top: "50%",
-        left: "50%",
-        transform: "translate(-50%, -50%)",
-        background: "var(--brand)",
-        color: "#fff",
-        padding: "14px 18px",
-        borderRadius: 14,
-        boxShadow: "0 10px 24px rgba(0,0,0,.25)",
-        fontWeight: 700,
-        zIndex: 9999,
-      }}
-    >
-      {msg}
-    </div>
-  );
-}
-
 /* ---------- Types ---------- */
 type Step = { position: number; body: string };
 type Line = {
@@ -237,12 +214,6 @@ export default function CreateRecipePage() {
   const [prepTime, setPrepTime] = useState("");
   const [cookTime, setCookTime] = useState("");
   const [difficulty, setDifficulty] = useState("");
-  const [toast, setToast] = useState("");
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(""), 2500);
-  }
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
@@ -314,9 +285,9 @@ export default function CreateRecipePage() {
      ------------------------------------------------------------- */
   async function saveRecipe() {
     try {
-      if (!title.trim()) return showToast("Title is required.");
+      if (!title.trim()) return window.vcToast("Title is required.");
       if (isPublic && !cover && !existingCoverPath)
-        return showToast("Public recipes must include a cover image.");
+        return window.vcToast("Public recipes must include a cover image.");
 
       setLoading(true);
       const { data } = await supabase.auth.getUser();
@@ -394,10 +365,10 @@ export default function CreateRecipePage() {
         await supabase.from("recipes").update({ image_url: path }).eq("id", recipeId);
       }
 
-      showToast(editing ? "Recipe updated!" : "Recipe created!");
+      window.vcToast(editing ? "Recipe updated!" : "Recipe created!");
       setTimeout(() => nav("/me"), 1000);
     } catch (e: any) {
-      showToast(e.message);
+      window.vcToast(e.message);
     } finally {
       setLoading(false);
     }
@@ -424,7 +395,6 @@ export default function CreateRecipePage() {
      ------------------------------------------------------------- */
   return (
     <div className="fade-in" style={{ maxWidth: 960, margin: "0 auto", padding: "2rem 1rem" }}>
-      {toast && <Toast msg={toast} />}
 
       <h2 style={{ textAlign: "center", color: "var(--brand)", fontSize: "1.9rem", fontWeight: 800 }}>
         {editing ? "Edit Recipe" : "Create Recipe"}
