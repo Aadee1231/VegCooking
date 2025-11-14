@@ -226,7 +226,10 @@ export default function CreateRecipePage() {
   const [steps, setSteps] = useState<Step[]>([{ position: 1, body: "" }]);
   const [lines, setLines] = useState<Line[]>([{ position: 1 }]);
   const [cover, setCover] = useState<File | null>(null);
-  const [existingCoverPath] = useState<string | null>(null);
+
+  // IMPORTANT — make this writable:
+  const [existingCoverPath, setExistingCoverPath] = useState<string | null>(null);
+
   const [tags, setTags] = useState<string[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -245,6 +248,70 @@ export default function CreateRecipePage() {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
   }, []);
 
+  /* -------------------------------------------------------------
+     🟢 EDIT MODE — LOAD EXISTING RECIPE DATA
+     ------------------------------------------------------------- */
+  useEffect(() => {
+    if (!editing || !id) return;
+
+    async function loadExisting() {
+      const { data: rec } = await supabase
+        .from("recipes")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (!rec) return;
+
+      setTitle(rec.title ?? "");
+      setCaption(rec.caption ?? "");
+      setDescription(rec.description ?? "");
+      setServings(rec.servings ?? "");
+      setIsPublic(rec.is_public ?? false);
+      setTags(rec.tags ?? []);
+      setPrepTime(rec.prep_time ?? "");
+      setCookTime(rec.cook_time ?? "");
+      setDifficulty(rec.difficulty ?? "");
+
+      if (rec.image_url) setExistingCoverPath(rec.image_url);
+
+      // Load Ingredients
+      const { data: ing } = await supabase
+        .from("recipe_ingredients")
+        .select("position,quantity,unit_code,notes,ingredients(id,name)")
+        .eq("recipe_id", id)
+        .order("position");
+
+      if (ing?.length) {
+        setLines(
+          ing.map((r: any) => ({
+            position: r.position,
+            ingredient: r.ingredients,
+            quantity: r.quantity,
+            unit_code: r.unit_code,
+            notes: r.notes,
+          }))
+        );
+      }
+
+      // Load Steps
+      const { data: st } = await supabase
+        .from("recipe_steps")
+        .select("position,body")
+        .eq("recipe_id", id)
+        .order("position");
+
+      if (st?.length) {
+        setSteps(st);
+      }
+    }
+
+    loadExisting();
+  }, [editing, id]);
+
+  /* -------------------------------------------------------------
+     SAVE RECIPE
+     ------------------------------------------------------------- */
   async function saveRecipe() {
     try {
       if (!title.trim()) return showToast("Title is required.");
@@ -256,8 +323,8 @@ export default function CreateRecipePage() {
       const uid = data.user?.id;
       if (!uid) throw new Error("Sign in first");
 
-      // Create or update recipe
       let recipeId: number;
+
       if (editing && id) {
         recipeId = Number(id);
         await supabase
@@ -274,6 +341,7 @@ export default function CreateRecipePage() {
             difficulty: difficulty || null,
           })
           .eq("id", recipeId);
+
         await supabase.from("recipe_steps").delete().eq("recipe_id", recipeId);
         await supabase.from("recipe_ingredients").delete().eq("recipe_id", recipeId);
       } else {
@@ -293,6 +361,7 @@ export default function CreateRecipePage() {
           })
           .select("id")
           .single();
+
         recipeId = rec!.id;
       }
 
@@ -334,6 +403,9 @@ export default function CreateRecipePage() {
     }
   }
 
+  /* -------------------------------------------------------------
+     ADD / REMOVE ITEMS
+     ------------------------------------------------------------- */
   const addStep = () =>
     setSteps((p) => [...p, { position: p.length + 1, body: "" }]);
   const removeStep = (pos: number) =>
@@ -347,6 +419,9 @@ export default function CreateRecipePage() {
       p.filter((l) => l.position !== pos).map((l, i) => ({ ...l, position: i + 1 }))
     );
 
+  /* -------------------------------------------------------------
+     UI RENDER
+     ------------------------------------------------------------- */
   return (
     <div className="fade-in" style={{ maxWidth: 960, margin: "0 auto", padding: "2rem 1rem" }}>
       {toast && <Toast msg={toast} />}
@@ -359,8 +434,10 @@ export default function CreateRecipePage() {
         {/* BASIC INFO */}
         <label style={labelStyle}>Title *</label>
         <input value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} />
+
         <label style={labelStyle}>Caption</label>
         <input value={caption} onChange={(e) => setCaption(e.target.value)} style={inputStyle} />
+
         <label style={labelStyle}>Description</label>
         <textarea
           value={description}
@@ -371,22 +448,14 @@ export default function CreateRecipePage() {
 
         {/* META INFO */}
         <h3 style={{ color: "var(--brand)", marginTop: 20 }}>Details</h3>
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "1rem",
-          }}
-        >
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>
           <div style={{ flex: "1 1 200px" }}>
             <label style={labelStyle}>Servings</label>
             <input
               type="number"
               placeholder="e.g., 4"
               value={servings}
-              onChange={(e) =>
-                setServings(e.target.value === "" ? "" : Number(e.target.value))
-              }
+              onChange={(e) => setServings(e.target.value === "" ? "" : Number(e.target.value))}
               style={inputStyle}
             />
           </div>
@@ -421,6 +490,7 @@ export default function CreateRecipePage() {
         {/* COVER IMAGE */}
         <h3 style={{ color: "var(--brand)", marginTop: 20 }}>Cover Image</h3>
         <input type="file" accept="image/*" onChange={(e) => setCover(e.target.files?.[0] ?? null)} />
+
         {(cover || existingCoverPath) && (
           <img
             src={
@@ -446,9 +516,7 @@ export default function CreateRecipePage() {
             <button
               key={t}
               className={`btn ${tags.includes(t) ? "" : "btn-secondary"}`}
-              onClick={() =>
-                setTags((p) => (p.includes(t) ? p.filter((x) => x !== t) : [...p, t]))
-              }
+              onClick={() => setTags((p) => (p.includes(t) ? p.filter((x) => x !== t) : [...p, t]))}
             >
               {t}
             </button>
@@ -469,17 +537,17 @@ export default function CreateRecipePage() {
             }}
           >
             <strong>{l.position}.</strong>
+
             <IngredientCombo
               value={l.ingredient ?? null}
               onPick={(row) =>
                 setLines((p) =>
-                  p.map((x) =>
-                    x.position === l.position ? { ...x, ingredient: row } : x
-                  )
+                  p.map((x) => (x.position === l.position ? { ...x, ingredient: row } : x))
                 )
               }
               currentUserId={userId}
             />
+
             <input
               type="number"
               placeholder="Qty"
@@ -487,22 +555,19 @@ export default function CreateRecipePage() {
               onChange={(e) =>
                 setLines((p) =>
                   p.map((x) =>
-                    x.position === l.position
-                      ? { ...x, quantity: Number(e.target.value) }
-                      : x
+                    x.position === l.position ? { ...x, quantity: Number(e.target.value) } : x
                   )
                 )
               }
               style={{ ...inputStyle, width: 80 }}
             />
+
             <select
               value={l.unit_code ?? ""}
               onChange={(e) =>
                 setLines((p) =>
                   p.map((x) =>
-                    x.position === l.position
-                      ? { ...x, unit_code: e.target.value }
-                      : x
+                    x.position === l.position ? { ...x, unit_code: e.target.value } : x
                   )
                 )
               }
@@ -513,25 +578,26 @@ export default function CreateRecipePage() {
                 <option key={u}>{u}</option>
               ))}
             </select>
+
             <input
               placeholder="Notes"
               value={l.notes ?? ""}
               onChange={(e) =>
                 setLines((p) =>
                   p.map((x) =>
-                    x.position === l.position
-                      ? { ...x, notes: e.target.value }
-                      : x
+                    x.position === l.position ? { ...x, notes: e.target.value } : x
                   )
                 )
               }
               style={{ ...inputStyle, flex: 1, minWidth: 180 }}
             />
+
             <button className="btn btn-danger" onClick={() => removeLine(l.position)}>
               🗑
             </button>
           </div>
         ))}
+
         <button className="btn btn-secondary" onClick={addLine}>
           + Add Ingredient
         </button>
@@ -541,14 +607,13 @@ export default function CreateRecipePage() {
         {steps.map((s) => (
           <div key={s.position} style={{ marginBottom: 10 }}>
             <strong>Step {s.position}</strong>
+
             <textarea
               rows={2}
               value={s.body}
               onChange={(e) =>
                 setSteps((p) =>
-                  p.map((x) =>
-                    x.position === s.position ? { ...x, body: e.target.value } : x
-                  )
+                  p.map((x) => (x.position === s.position ? { ...x, body: e.target.value } : x))
                 )
               }
               style={{
@@ -558,11 +623,13 @@ export default function CreateRecipePage() {
                 minHeight: 70,
               }}
             />
+
             <button className="btn btn-danger" onClick={() => removeStep(s.position)}>
               🗑 Delete Step
             </button>
           </div>
         ))}
+
         <button className="btn btn-secondary" onClick={addStep}>
           + Add Step
         </button>
@@ -574,6 +641,7 @@ export default function CreateRecipePage() {
               🗑 Delete Recipe
             </button>
           )}
+
           <button className="btn" disabled={loading} onClick={saveRecipe}>
             {loading ? "Saving..." : editing ? "Save Changes" : "Create Recipe"}
           </button>
