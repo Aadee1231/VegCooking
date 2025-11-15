@@ -409,3 +409,41 @@ button.active-tag {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* --- Image Hover Zoom --- */
+.feed-card:hover .card-img {
+  transform: scale(1.06);
+}
+
+/* --- Heart Pop Animation --- */
+@keyframes heartPop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+.heart-pop {
+  animation: heartPop 0.35s ease;
+}
+
+/* --- Tap Feedback for Icons --- */
+.action-tap:active,
+.heart-interact:active {
+  transform: scale(0.92);
+  transition: transform .1s ease;
+}
+
+/* --- Tag Chips --- */
+.tag-chip {
+  transition: background .25s ease, transform .2s ease;
+}
+.tag-chip:hover {
+  background: var(--brand-700);
+  color: white;
+  transform: translateY(-2px);
+}
+
+/* --- Card Float on Hover --- */
+.feed-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.12);
+}
