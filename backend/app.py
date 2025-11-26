@@ -1,11 +1,9 @@
 import os
-import json
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 from supabase import create_client, Client
-from openai import OpenAI
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE = os.environ.get("SUPABASE_SERVICE_ROLE")
@@ -14,13 +12,6 @@ if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE:
     raise RuntimeError("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE env var")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE)
-#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
-
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    raise RuntimeError("Missing OPENAI_API_KEY env var")
-
-client = OpenAI(api_key=OPENAI_API_KEY)
 
 app = FastAPI()
 
@@ -51,29 +42,6 @@ class RecipeOut(BaseModel):
     image_url: Optional[str] = None
     user_id: str
     created_at: str
-
-class AIIngredient(BaseModel):
-    name: str
-    quantity: Optional[float] = None
-    unit: Optional[str] = None
-    notes: Optional[str] = None
-
-class VideoConvertRequest(BaseModel):
-    url: Optional[str] = None           # TikTok / IG / YT link
-    raw_text: Optional[str] = None      # caption, transcript, or your notes
-
-class VideoRecipeResponse(BaseModel):
-    title: str
-    caption: Optional[str] = None
-    description: Optional[str] = None
-    servings: Optional[int] = None
-    prep_time: Optional[str] = None
-    cook_time: Optional[str] = None
-    difficulty: Optional[str] = None
-    tags: List[str] = []
-    ingredients: List[AIIngredient] = []
-    steps: List[str] = []
-
 
 @app.get("/health")
 def health():
@@ -117,112 +85,3 @@ def delete_recipe(recipe_id: int, user_id: str):
 
     supabase.table("recipes").delete().eq("id", recipe_id).execute()
     return {"ok": True}
-
-@app.post("/ai/convert-video", response_model=VideoRecipeResponse)
-def convert_video_to_recipe(payload: VideoConvertRequest):
-    """
-    Convert a TikTok / Reels / YouTube cooking video into a structured recipe.
-    For MVP we rely on the URL + any text the user provides (caption/notes).
-    """
-
-    if not payload.url and not payload.raw_text:
-        raise HTTPException(status_code=400, detail="Provide either url or raw_text")
-
-    # Build a clear text input for the model
-    description_block = f"Video URL: {payload.url or 'N/A'}\n\nRaw text / caption:\n{payload.raw_text or 'N/A'}"
-
-    # Prompt for structured recipe
-    system_prompt = (
-        "You are an assistant that converts short cooking videos into precise, "
-        "structured recipes in JSON format. Be specific but don't hallucinate steps "
-        "that aren't implied. If something is unknown, leave it null or empty."
-    )
-
-    user_prompt = (
-        "Convert the following cooking content into a recipe.\n\n"
-        f"{description_block}\n\n"
-        "Return ONLY JSON matching this schema:\n"
-        "{\n"
-        "  \"title\": string,\n"
-        "  \"caption\": string or null,\n"
-        "  \"description\": string or null,\n"
-        "  \"servings\": integer or null,\n"
-        "  \"prep_time\": string or null,\n"
-        "  \"cook_time\": string or null,\n"
-        "  \"difficulty\": string or null,\n"
-        "  \"tags\": string[],\n"
-        "  \"ingredients\": [\n"
-        "    {\"name\": string, \"quantity\": number or null, \"unit\": string or null, \"notes\": string or null}\n"
-        "  ],\n"
-        "  \"steps\": string[]\n"
-        "}"
-    )
-
-    # Use the Responses API with structured JSON output
-    try:
-        response = client.responses.create(
-            model="gpt-4.1-mini",  # good + cheaper, you can upgrade to gpt-5.1 later
-            input=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "recipe",
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "title": {"type": "string"},
-                            "caption": {"type": ["string", "null"]},
-                            "description": {"type": ["string", "null"]},
-                            "servings": {"type": ["integer", "null"]},
-                            "prep_time": {"type": ["string", "null"]},
-                            "cook_time": {"type": ["string", "null"]},
-                            "difficulty": {"type": ["string", "null"]},
-                            "tags": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                            },
-                            "ingredients": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "name": {"type": "string"},
-                                        "quantity": {
-                                            "type": ["number", "null"]
-                                        },
-                                        "unit": {
-                                            "type": ["string", "null"]
-                                        },
-                                        "notes": {
-                                            "type": ["string", "null"]
-                                        },
-                                    },
-                                    "required": ["name"],
-                                },
-                            },
-                            "steps": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                            },
-                        },
-                        "required": ["title", "ingredients", "steps"],
-                    },
-                    "strict": True,
-                },
-            },
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"OpenAI error: {e}")
-
-    try:
-        # Responses API returns structured output; we pull the JSON string then parse
-        content = response.output[0].content[0].text  # type: ignore[attr-defined]
-        data = json.loads(content)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to parse model output: {e}")
-
-    # Pydantic will validate this shape
-    return VideoRecipeResponse(**data)
