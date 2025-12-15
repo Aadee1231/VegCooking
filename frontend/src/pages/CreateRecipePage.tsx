@@ -7,6 +7,22 @@ import {
   type IngredientRow,
 } from "../lib/ingredients";
 import { useNavigate, useParams } from "react-router-dom";
+import {
+  Heart,
+  BookmarkSimple,
+  X,
+  Trash,
+  PencilSimple,
+  Clock,
+  Fire,
+  Gauge,
+  MapPin,
+  Check,
+  Plus,
+} from "phosphor-react";
+
+
+
 
 /* ---------- Types ---------- */
 type Step = { position: number; body: string };
@@ -17,6 +33,13 @@ type Line = {
   unit_code?: string | null;
   notes?: string | null;
 };
+type AIIngredient = {
+  name: string;
+  quantity?: number | null;
+  unit?: string | null;
+  notes?: string | null;
+};
+
 const UNITS = ["g", "kg", "ml", "l", "tsp", "tbsp", "cup", "pc"];
 const TAG_OPTIONS = [
   "Vegan",
@@ -48,6 +71,10 @@ function IngredientCombo({
   const [loading, setLoading] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const [confirmName, setConfirmName] = useState<string | null>(null);
+
+
+
 
   useEffect(() => setQ(value?.name ?? ""), [value?.id, value?.name]);
 
@@ -79,16 +106,15 @@ function IngredientCombo({
     return () => document.removeEventListener("mousedown", click);
   }, [open]);
 
-  async function addNew() {
-    const name = q.trim();
-    if (!name) return;
-    try {
-      onPick(await createIngredient(name));
-      setOpen(false);
-    } catch (e: any) {
-      alert(e.message);
+    function addNew() {
+        const name = q.trim();
+        if (!name) return;
+
+        setConfirmName(name);
     }
-  }
+
+
+
 
   return (
     <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
@@ -150,24 +176,62 @@ function IngredientCombo({
                       setItems((p) => p.filter((x) => x.id !== row.id));
                     }}
                   >
-                    🗑
+                    <Trash size={18} />
                   </button>
                 )}
               </div>
             ))
           ) : (
-            <div
-              style={{
-                padding: 10,
-                display: "flex",
-                justifyContent: "space-between",
-              }}
-            >
-              <span>No matches — Add new?</span>
-              <button className="btn" onClick={addNew}>
-                Add
-              </button>
+            <div style={{ padding: 10 }}>
+            {!confirmName ? (
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>No matches — Add new?</span>
+                <button
+                    type="button"
+                    className="btn"
+                    onClick={addNew}
+                >
+                    Add
+                </button>
+                </div>
+            ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <strong>
+                    Add “{confirmName}” as a new ingredient?
+                </strong>
+
+                <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                    type="button"
+                    className="btn"
+                    onClick={async () => {
+                        try {
+                        const created = await createIngredient(confirmName);
+                        onPick(created);
+                        setOpen(false);
+                        setConfirmName(null);
+                        window.vcToast("Ingredient added!");
+                        } catch (e: any) {
+                        window.vcToast(e.message || "Ingredient already exists.");
+                        setConfirmName(null);
+                        }
+                    }}
+                    >
+                    <Check size={18} /> Yes, Add
+                    </button>
+
+                    <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setConfirmName(null)}
+                    >
+                    <X size={18} /> Cancel
+                    </button>
+                </div>
+                </div>
+            )}
             </div>
+
           )}
         </div>
       )}
@@ -214,6 +278,10 @@ export default function CreateRecipePage() {
   const [prepTime, setPrepTime] = useState("");
   const [cookTime, setCookTime] = useState("");
   const [difficulty, setDifficulty] = useState("");
+  const [demoUrl, setDemoUrl] = useState("");
+
+
+
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
@@ -243,6 +311,7 @@ export default function CreateRecipePage() {
       setPrepTime(rec.prep_time ?? "");
       setCookTime(rec.cook_time ?? "");
       setDifficulty(rec.difficulty ?? "");
+      setDemoUrl(rec.demo_url ?? "");
 
       if (rec.image_url) setExistingCoverPath(rec.image_url);
 
@@ -288,6 +357,23 @@ export default function CreateRecipePage() {
       if (!title.trim()) return window.vcToast("Title is required.");
       if (isPublic && !cover && !existingCoverPath)
         return window.vcToast("Public recipes must include a cover image.");
+      if (servings !== "" && (Number(servings) <= 0 || !Number.isFinite(Number(servings))))
+        return window.vcToast("Servings must be a positive number.");
+
+      const timePattern = /^\d+\s*(min|mins|minutes|hr|hrs|hour|hours)?$/i;
+
+      if (prepTime && !timePattern.test(prepTime.trim())) {
+        return window.vcToast(
+            "Prep time should start with a number, e.g. '20 min' or '1 hr'."
+        );
+        }
+      if (cookTime && !timePattern.test(cookTime.trim())) {
+        return window.vcToast(
+            "Cook time should start with a number, e.g. '30 min' or '45 minutes'."
+        );
+        }
+ 
+    
 
       setLoading(true);
       const { data } = await supabase.auth.getUser();
@@ -310,6 +396,7 @@ export default function CreateRecipePage() {
             prep_time: prepTime || null,
             cook_time: cookTime || null,
             difficulty: difficulty || null,
+            demo_url: demoUrl || null,
           })
           .eq("id", recipeId);
 
@@ -329,6 +416,7 @@ export default function CreateRecipePage() {
             prep_time: prepTime || null,
             cook_time: cookTime || null,
             difficulty: difficulty || null,
+            demo_url: demoUrl || null,
           })
           .select("id")
           .single();
@@ -390,15 +478,26 @@ export default function CreateRecipePage() {
       p.filter((l) => l.position !== pos).map((l, i) => ({ ...l, position: i + 1 }))
     );
 
+    
+
+
   /* -------------------------------------------------------------
      UI RENDER
      ------------------------------------------------------------- */
   return (
-    <div className="fade-in" style={{ maxWidth: 900, margin: "0 auto", padding: "2rem 1rem" }}>
+      <form
+        onSubmit={(e) => {
+            e.preventDefault();   // stops page refresh
+            void saveRecipe();    // calls your existing saveRecipe function
+        }}
+        className="fade-in"
+        style={{ maxWidth: 900, margin: "0 auto", padding: "2rem 1rem" }}
+      >
 
       <h2 style={{ textAlign: "center", color: "var(--brand)", fontSize: "1.9rem", fontWeight: 800 }}>
         {editing ? "Edit Recipe" : "Create Recipe"}
       </h2>
+
 
       <div className="card" style={{ padding: "1.8rem", borderRadius: 18, display: "flex", flexDirection: "column", gap: "1rem", boxShadow: "0 4px 14px rgba(0,0,0,.08)" }}>
         {/* BASIC INFO */}
@@ -423,9 +522,21 @@ export default function CreateRecipePage() {
             <label style={labelStyle}>Servings</label>
             <input
               type="number"
+              min={1}
+              step={1}
               placeholder="e.g., 4"
               value={servings}
-              onChange={(e) => setServings(e.target.value === "" ? "" : Number(e.target.value))}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "") {
+                setServings("");
+                } else {
+                const num = Number(val);
+                if (Number.isFinite(num) && num > 0) {
+                    setServings(num);
+                }
+                }
+              }}              
               style={inputStyle}
             />
           </div>
@@ -479,6 +590,20 @@ export default function CreateRecipePage() {
           />
         )}
 
+        {/* Demo Reel */}
+        <h3 style={{ color: "var(--brand)", marginTop: 20 }}>Demo Video (optional)</h3>
+        <input
+        type="url"
+        placeholder="YouTube / Instagram / TikTok link..."
+        value={demoUrl}
+        onChange={(e) => setDemoUrl(e.target.value)}
+        style={inputStyle}
+        />
+        <small style={{ color: "#777", marginTop: 4 }}>
+        This link will show on the recipe page as a demo video.
+        </small>
+
+
         {/* TAGS */}
         <h3 style={{ color: "var(--brand)", marginTop: 20 }}>Tags</h3>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -519,18 +644,27 @@ export default function CreateRecipePage() {
             />
 
             <input
-              type="number"
-              placeholder="Qty"
-              value={l.quantity ?? ""}
-              onChange={(e) =>
-                setLines((p) =>
-                  p.map((x) =>
-                    x.position === l.position ? { ...x, quantity: Number(e.target.value) } : x
-                  )
-                )
-              }
-              style={{ ...inputStyle, width: 80 }}
+                type="number"
+                min={0}
+                placeholder="Qty"
+                value={l.quantity ?? ""}
+                onChange={(e) => {
+                    const val = e.target.value;
+                    setLines((p) =>
+                    p.map((x) =>
+                        x.position === l.position
+                        ? {
+                            ...x,
+                            quantity:
+                                val === "" ? null : Math.max(0, Number(val)),
+                            }
+                        : x
+                    )
+                    );
+                }}
+                style={{ ...inputStyle, width: 80 }}
             />
+
 
             <select
               value={l.unit_code ?? ""}
@@ -562,15 +696,25 @@ export default function CreateRecipePage() {
               style={{ ...inputStyle, flex: 1, minWidth: 180 }}
             />
 
-            <button className="btn btn-danger" onClick={() => removeLine(l.position)}>
-              🗑
+            <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => removeLine(l.position)}
+                >
+                <Trash size={18} />
             </button>
+
           </div>
         ))}
 
-        <button className="btn btn-secondary" onClick={addLine}>
-          + Add Ingredient
+        <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={addLine}
+            >
+            <Plus size={18} /> Add Ingredient
         </button>
+
 
         {/* STEPS */}
         <h3 style={{ color: "var(--brand)", marginTop: 20 }}>Steps</h3>
@@ -594,29 +738,53 @@ export default function CreateRecipePage() {
               }}
             />
 
-            <button className="btn btn-danger" onClick={() => removeStep(s.position)}>
-              🗑 Delete Step
+            <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => removeStep(s.position)}
+                >
+                <Trash size={18} /> Delete Step
             </button>
+
           </div>
         ))}
 
-        <button className="btn btn-secondary" onClick={addStep}>
-          + Add Step
-        </button>
+            <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={addStep}
+                >
+                + Add Step
+            </button>
+
 
         {/* SAVE */}
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20 }}>
-          {editing && (
-            <button className="btn btn-danger" onClick={() => nav("/me")}>
-              🗑 Delete Recipe
-            </button>
-          )}
+        <div
+            style={{
+                display: "flex",
+                justifyContent: "space-between",
+                marginTop: 20,
+            }}
+            >
+            {editing && (
+                <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => nav("/me")}
+                >
+                <Trash size={18} /> Delete Recipe
+                </button>
+            )}
 
-          <button className="btn" disabled={loading} onClick={saveRecipe}>
-            {loading ? "Saving..." : editing ? "Save Changes" : "Create Recipe"}
-          </button>
-        </div>
+            <button
+                className="btn"
+                type="submit"
+                disabled={loading}
+            >
+                {loading ? "Saving..." : editing ? "Save Changes" : "Create Recipe"}
+            </button>
+          </div>
       </div>
-    </div>
+    </form>
   );
 }

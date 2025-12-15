@@ -447,3 +447,30 @@ button.active-tag {
   transform: translateY(-4px);
   box-shadow: 0 10px 28px rgba(0,0,0,0.12);
 }
+
+
+.saved-ribbon {
+  position: absolute;
+  top: 16px;
+  left: -70px;
+
+  background: linear-gradient(135deg, #2e7d32, #1b5e20);
+  color: white;
+
+  padding: 8px 90px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+
+  transform: rotate(-35deg);
+  text-transform: uppercase;
+
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+  z-index: 5;
+}
+
+svg {
+  vertical-align: middle;
+}
+
+

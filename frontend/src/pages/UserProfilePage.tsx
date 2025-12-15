@@ -1,6 +1,18 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useParams, Link } from "react-router-dom";
+import {
+  Heart,
+  BookmarkSimple,
+  X,
+  Trash,
+  PencilSimple,
+  Clock,
+  Fire,
+  Gauge,
+  MapPin,
+} from "phosphor-react";  
+
 
 type Profile = {
   id: string;

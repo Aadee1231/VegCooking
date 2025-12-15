@@ -3,6 +3,15 @@ import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import "./App.css";
 import GlobalToast from "./components/Toast";
+import {
+  House,
+  PlusCircle,
+  Calendar,
+  User,
+  MagnifyingGlass,
+  SignOut,
+} from "phosphor-react";
+
 
 type SearchResult = {
   id: number | string;
@@ -166,7 +175,7 @@ export default function App() {
 
         {/* --- Mobile iOS-style search (phones only) --- */}
         <div className="ios-searchbar">
-            <i className="ri-search-line"></i>
+            <MagnifyingGlass size={20} />
             <input
                 type="text"
                 placeholder="Search recipes, users, or tags"
@@ -283,22 +292,26 @@ export default function App() {
       {/* --- MOBILE NAV BAR (iOS-style) --- */}
       <nav className="mobile-nav">
         <Link to="/" className={location.pathname === "/" ? "active" : ""}>
-            <i className="ri-home-5-line"></i>
+            <House size={26} weight="bold" />
             <span>Feed</span>
         </Link>
+
         <Link to="/create" className={location.pathname.startsWith("/create") ? "active" : ""}>
-            <i className="ri-add-circle-line"></i>
+            <PlusCircle size={26} weight="bold" />
             <span>Create</span>
         </Link>
+
         <Link to="/plan" className={location.pathname.startsWith("/plan") ? "active" : ""}>
-            <i className="ri-calendar-line"></i>
+            <Calendar size={26} weight="bold" />
             <span>Meal</span>
         </Link>
+
         <Link to="/me" className={location.pathname.startsWith("/me") ? "active" : ""}>
-            <i className="ri-user-3-line"></i>
+            <User size={26} weight="bold" />
             <span>Account</span>
         </Link>
       </nav>
+
 
       <footer>© {new Date().getFullYear()} VegCooking — Share & Explore Recipes</footer>
       <GlobalToast message={toast} clear={() => setToast("")} />

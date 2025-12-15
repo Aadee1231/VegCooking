@@ -1,6 +1,19 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import {
+  Heart,
+  BookmarkSimple,
+  X,
+  Trash,
+  PencilSimple,
+  Clock,
+  Fire,
+  Gauge,
+  MapPin, 
+  ChatCircleDots,
+} from "phosphor-react";
+
 
 type Recipe = {
   id: number;
@@ -14,6 +27,7 @@ type Recipe = {
   prep_time?: string | null;
   cook_time?: string | null;
   difficulty?: string | null;
+  demo_url?: string | null;
 };
 
 type Profile = { id: string; username: string | null; avatar_url: string | null };
@@ -45,20 +59,46 @@ export default function RecipeDetailPage() {
   const [newComment, setNewComment] = useState("");
   const [commentLikes, setCommentLikes] = useState<Record<number, number>>({});
   const [isRecipeLiked, setIsRecipeLiked] = useState(false);
+  const [likedComments, setLikedComments] = useState<Set<number>>(new Set());
+  const [isRecipeSaved, setIsRecipeSaved] = useState(false);
+
 
   const avatarUrl = (p: string | null) =>
     p ? supabase.storage.from("profile-avatars").getPublicUrl(p).data.publicUrl : "/default-avatar.svg";
   const imgUrl = (p: string | null) =>
     p ? supabase.storage.from("recipe-media").getPublicUrl(p).data.publicUrl : null;
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
-  }, []);
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
+    }, []);
 
-  useEffect(() => {
-    if (!id) return;
-    loadRecipe();
-  }, [id]);
+    useEffect(() => {
+        if (!id || !currentUserId) return;
+        loadRecipe();
+    }, [id, currentUserId]);
+
+
+  async function loadUserRecipeState(recipeId: number, uid: string) {
+    // Check like
+    const { data: like } = await supabase
+        .from("likes")
+        .select("id")
+        .eq("recipe_id", recipeId)
+        .eq("user_id", uid)
+        .maybeSingle();
+
+    setIsRecipeLiked(!!like);
+
+    // Check saved
+    const { data: saved } = await supabase
+        .from("user_added_recipes")
+        .select("id")
+        .eq("recipe_id", recipeId)
+        .eq("user_id", uid)
+        .maybeSingle();
+
+    setIsRecipeSaved(!!saved);
+  }
 
 
   async function loadRecipe() {
@@ -69,6 +109,10 @@ export default function RecipeDetailPage() {
       return;
     }
     setRecipe(rec);
+    if (currentUserId) {
+        await loadUserRecipeState(rec.id, currentUserId);
+    }
+
     const { data: prof } = await supabase
       .from("profiles")
       .select("id,username,avatar_url")
@@ -123,22 +167,57 @@ export default function RecipeDetailPage() {
       .order("created_at", { ascending: false });
     setComments((data ?? []) as any);
     setCommentCount(count ?? 0);
-    const { data: likesData } = await supabase.from("comment_likes").select("*");
+    const { data: likesData } = await supabase
+        .from("comment_likes")
+        .select("comment_id,user_id");
+
     const likeMap: Record<number, number> = {};
-    (likesData ?? []).forEach((l) => (likeMap[l.comment_id] = (likeMap[l.comment_id] || 0) + 1));
+    const userLiked = new Set<number>();
+
+    (likesData ?? []).forEach((l) => {
+        likeMap[l.comment_id] = (likeMap[l.comment_id] || 0) + 1;
+        if (l.user_id === currentUserId) {
+            userLiked.add(l.comment_id);
+        }
+    });
+
     setCommentLikes(likeMap);
+    setLikedComments(userLiked);
   }
 
   async function toggleCommentLike(commentId: number) {
     if (!currentUserId) return window.vcToast("Sign in first!");
-    const { error } = await supabase.from("comment_likes").insert({ comment_id: commentId, user_id: currentUserId });
-    if (error) {
-      await supabase.from("comment_likes").delete().eq("comment_id", commentId).eq("user_id", currentUserId);
-      setCommentLikes((m) => ({ ...m, [commentId]: Math.max(0, (m[commentId] || 1) - 1) }));
+
+    if (likedComments.has(commentId)) {
+        await supabase
+        .from("comment_likes")
+        .delete()
+        .eq("comment_id", commentId)
+        .eq("user_id", currentUserId);
+
+        setLikedComments((s) => {
+        const next = new Set(s);
+        next.delete(commentId);
+        return next;
+        });
+
+        setCommentLikes((m) => ({
+        ...m,
+        [commentId]: Math.max(0, (m[commentId] || 1) - 1),
+        }));
     } else {
-      setCommentLikes((m) => ({ ...m, [commentId]: (m[commentId] || 0) + 1 }));
+        await supabase
+        .from("comment_likes")
+        .insert({ comment_id: commentId, user_id: currentUserId });
+
+        setLikedComments((s) => new Set(s).add(commentId));
+        setCommentLikes((m) => ({
+        ...m,
+        [commentId]: (m[commentId] || 0) + 1,
+        }));
     }
-  }
+    }
+
 
   async function deleteComment(commentId: number) {
     await supabase.from("comments").delete().eq("id", commentId);
@@ -295,22 +374,52 @@ export default function RecipeDetailPage() {
         ) : (
           <>
             <button className="btn" disabled={liking} onClick={likeRecipe}>
-            <span
-                style={{
-                    color: isRecipeLiked ? "red" : "#bbb",
-                    transition: "0.2s",
-                    fontSize: "1.35rem",
+                <Heart
+                    size={20}
+                    weight={isRecipeLiked ? "fill" : "regular"}
+                    color={isRecipeLiked ? "#e53935" : "#666"}
+                />
+                {likeCount}
+            </button>
+
+            <button
+                className="btn btn-secondary"
+                disabled={adding}
+                onClick={async () => {
+                    if (!recipe || !currentUserId) return;
+
+                    if (isRecipeSaved) {
+                    await supabase
+                        .from("user_added_recipes")
+                        .delete()
+                        .eq("user_id", currentUserId)
+                        .eq("recipe_id", recipe.id);
+
+                    setIsRecipeSaved(false);
+                    window.vcToast("Recipe removed");
+                    } else {
+                    await supabase
+                        .from("user_added_recipes")
+                        .insert({ user_id: currentUserId, recipe_id: recipe.id });
+
+                    setIsRecipeSaved(true);
+                    window.vcToast("Recipe saved!");
+                    }
                 }}
-            >
-                ♥
-            </span>{" "}
-            {likeCount}
+                >
+                {isRecipeSaved ? (
+                    <>
+                    <X size={18} /> Remove
+                    </>
+                ) : (
+                    <>
+                    <BookmarkSimple size={18} /> Add
+                    </>
+                )}
             </button>
-            <button className="btn btn-secondary" disabled={adding} onClick={addRecipe}>
-              ➕ Add
-            </button>
+
             <span style={{ color: "#777", alignSelf: "center", fontSize: ".9rem" }}>
-              💬 {commentCount}
+                <ChatCircleDots size={18} /> {commentCount}
             </span>
           </>
         )}
@@ -330,11 +439,11 @@ export default function RecipeDetailPage() {
             fontSize: ".95rem",
           }}
         >
-          {recipe.prep_time && <span>⏱ Prep: {recipe.prep_time}</span>}
-          {recipe.cook_time && <span>🔥 Cook: {recipe.cook_time}</span>}
+          {recipe.prep_time && <span><Clock size={16} /> Prep: {recipe.prep_time}</span>}
+          {recipe.cook_time && <span><Fire size={16} /> Cook: {recipe.cook_time}</span>}
           {(recipe.prep_time || recipe.cook_time) && (
             <span>
-              🕒 Total:{" "}
+              <Clock size={16} /> Total:{" "}
               {(() => {
                 const extract = (s: string) => parseInt(s.replace(/[^0-9]/g, "")) || 0;
                 const p = extract(recipe.prep_time || "0");
@@ -343,9 +452,58 @@ export default function RecipeDetailPage() {
               })()}
             </span>
           )}
-          {recipe.difficulty && <span>💪 Difficulty: {recipe.difficulty}</span>}
+          {recipe.difficulty && <span><Gauge size={16} /> Difficulty: {recipe.difficulty}</span>}
         </div>
       )}
+
+      {/* --- Demo Reel --- */}
+      {recipe.demo_url && (
+        <section style={{ marginBottom: "1.8rem" }}>
+            <h3 style={{ color: "var(--brand)", marginBottom: 8 }}>Demo Video</h3>
+            {recipe.demo_url.includes("youtube.com") ||
+            recipe.demo_url.includes("youtu.be") ? (
+            <div
+                style={{
+                position: "relative",
+                paddingBottom: "56.25%",
+                height: 0,
+                overflow: "hidden",
+                borderRadius: 12,
+                boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                }}
+            >
+                <iframe
+                src={
+                    recipe.demo_url.includes("embed")
+                    ? recipe.demo_url
+                    : recipe.demo_url.replace("watch?v=", "embed/")
+                }
+                title="Demo video"
+                style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: "100%",
+                    border: "none",
+                }}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                />
+            </div>
+            ) : (
+            <a
+                href={recipe.demo_url}
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: "#1565c0", textDecoration: "underline" }}
+            >
+                Open demo video →
+            </a>
+            )}
+        </section>
+        )}
+
 
       {/* --- Description --- */}
       {recipe.description && (
@@ -444,10 +602,16 @@ export default function RecipeDetailPage() {
         {currentUserId && (
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
             <input
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Share your thoughts…"
-              style={{ flex: 1 }}
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="Share your thoughts…"
+                style={{ flex: 1 }}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                    e.preventDefault();
+                    void postComment();
+                    }
+                }}
             />
             <button className="btn" onClick={postComment} disabled={posting}>
               {posting ? "…" : "Post"}
@@ -487,7 +651,13 @@ export default function RecipeDetailPage() {
                       style={{ fontSize: ".8rem", padding: "4px 8px" }}
                       onClick={() => toggleCommentLike(c.id)}
                     >
-                      ♥ {commentLikes[c.id] ?? 0}
+                    <Heart
+                        size={16}
+                        weight={likedComments.has(c.id) ? "fill" : "regular"}
+                        color={likedComments.has(c.id) ? "#e53935" : "#555"}
+                    />
+                    {commentLikes[c.id] ?? 0}
+
                     </button>
                     {c.user_id === currentUserId && (
                       <button
@@ -495,7 +665,7 @@ export default function RecipeDetailPage() {
                         style={{ fontSize: ".8rem", padding: "4px 8px" }}
                         onClick={() => deleteComment(c.id)}
                       >
-                        🗑 Delete
+                        <Trash size={16} /> Delete
                       </button>
                     )}
                   </div>

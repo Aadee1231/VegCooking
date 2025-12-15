@@ -2,7 +2,23 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Heart } from "lucide-react";
+import {
+  Heart,
+  BookmarkSimple,
+  X,
+  Trash,
+  PencilSimple,
+  Clock,
+  Fire,
+  Gauge,
+  MapPin,
+  CaretLeft,
+  CaretRight,
+  ChatCircleDots,
+} from "phosphor-react";
+
+
+
 
 type Recipe = {
   id: number;
@@ -40,10 +56,12 @@ export default function FeedPage() {
   const [items, setItems] = useState<Recipe[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [profileMap, setProfileMap] = useState<Record<string, Profile>>({});
-  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [activeTags, setActiveTags] = useState<string[]>([]);
   const [, setLiking] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [likedRecipes, setLikedRecipes] = useState<number[]>([]);
+  const [savedRecipes, setSavedRecipes] = useState<number[]>([]);
+
 
   useEffect(() => {
     (async () => {
@@ -51,8 +69,11 @@ export default function FeedPage() {
       const uid = data.user?.id ?? null;
       setUserId(uid);
 
-      await loadFeed(null);
-      if (uid) await loadUserLikes(uid);
+      await loadFeed([]);
+      if (uid) {
+         await loadUserLikes(uid);
+        await loadUserSaved(uid);
+      } 
     })();
   }, []);
 
@@ -65,7 +86,17 @@ export default function FeedPage() {
     setLikedRecipes((data ?? []).map((r) => r.recipe_id));
   }
 
-  async function loadFeed(tag: string | null) {
+  async function loadUserSaved(uid: string) {
+  const { data } = await supabase
+    .from("user_added_recipes")
+    .select("recipe_id")
+    .eq("user_id", uid);
+
+  setSavedRecipes((data ?? []).map((r) => r.recipe_id));
+}
+
+
+  async function loadFeed(tags: string[]) {
     setLoading(true);
 
     let query = supabase
@@ -74,7 +105,11 @@ export default function FeedPage() {
       .order("created_at", { ascending: false })
       .limit(60);
 
-    if (tag && tag !== "ALL") query = query.overlaps("tags", [tag]);
+    const realTags = tags.filter((t) => t !== "ALL");
+
+    if (realTags.length > 0) {
+        query = query.overlaps("tags", realTags);
+    }
 
     const { data, error } = await query;
     if (error) console.error(error);
@@ -121,7 +156,7 @@ export default function FeedPage() {
         .from("public_recipes_with_stats")
         .select("*")
         .eq("id", recipeId)
-        .single();
+        .single(); 
 
       setItems((prev) =>
         prev.map((r) => (r.id === recipeId ? (data as Recipe) : r))
@@ -131,17 +166,40 @@ export default function FeedPage() {
     }
   }
 
-  async function addToMyRecipes(recipeId: number, ownerId: string) {
+  async function toggleSaveRecipe(recipeId: number, ownerId: string) {
     if (!userId) return window.vcToast("Sign in to add");
-    if (ownerId === userId) return window.vcToast("You can't add your own recipe!");
+    if (ownerId === userId)
+        return window.vcToast("You can't add your own recipe!");
 
-    const { error } = await supabase
-      .from("user_added_recipes")
-      .insert({ user_id: userId, recipe_id: recipeId });
+    const alreadySaved = savedRecipes.includes(recipeId);
 
-    if (error && (error as any).code !== "23505") window.vcToast("Error adding");
-    else if (!error) window.vcToast("Recipe added!");
-    else window.vcToast("Already added.");
+    if (alreadySaved) {
+        const { error } = await supabase
+        .from("user_added_recipes")
+        .delete()
+        .eq("user_id", userId)
+        .eq("recipe_id", recipeId);
+
+        if (error) {
+        window.vcToast("Error removing");
+        } else {
+        setSavedRecipes((prev) => prev.filter((id) => id !== recipeId));
+        window.vcToast("Recipe removed from Saved");
+        }
+    } else {
+        const { error } = await supabase
+        .from("user_added_recipes")
+        .insert({ user_id: userId, recipe_id: recipeId });
+
+        if (error && (error as any).code !== "23505") {
+        window.vcToast("Error adding");
+        } else {
+        setSavedRecipes((prev) =>
+            prev.includes(recipeId) ? prev : [...prev, recipeId]
+        );
+        window.vcToast("Recipe saved!");
+        }
+    }
   }
 
   const avatarUrl = (p: string | null) =>
@@ -182,7 +240,7 @@ export default function FeedPage() {
             zIndex: 10,
           }}
         >
-          <ChevronLeft size={18} />
+          <CaretLeft size={18} />
         </button>
 
         <div
@@ -196,13 +254,33 @@ export default function FeedPage() {
           }}
         >
           {CATEGORIES.map((c) => (
-            <button
-              key={c.label}
-              onClick={() => {
-                setActiveTag(c.tag);
-                loadFeed(c.tag);
-              }}
-              className={`btn-secondary ${activeTag === c.tag ? "active-tag" : ""}`}
+          <button
+            key={c.label}
+            onClick={() => {
+                if (c.tag === "ALL") {
+                setActiveTags([]);
+                void loadFeed([]);
+                } else {
+                setActiveTags((prev) => {
+                    const exists = prev.includes(c.tag);
+                    const next = exists
+                    ? prev.filter((t) => t !== c.tag)
+                    : [...prev, c.tag];
+                    void loadFeed(next);
+                    return next;
+                });
+                }
+            }}
+            className={`btn-secondary ${
+                c.tag === "ALL"
+                ? activeTags.length === 0
+                    ? "active-tag"
+                    : ""
+                : activeTags.includes(c.tag)
+                ? "active-tag"
+                : ""
+            }`}
+
               style={{
                 minWidth: 90,
                 borderRadius: 50,
@@ -230,7 +308,7 @@ export default function FeedPage() {
             transform: "translateY(-50%)",
           }}
         >
-          <ChevronRight size={18} />
+          <CaretRight size={18} />
         </button>
       </div>
 
@@ -270,6 +348,10 @@ export default function FeedPage() {
               >
                 {/* IMAGE */}
                 <Link to={`/r/${r.id}`} style={{ position: "relative", display: "block" }}>
+                  {savedRecipes.includes(r.id) && !isOwn && (
+                    <div className="saved-ribbon">SAVED!</div>
+                  )}
+
                   <img
                     src={imgUrl(r.image_url)!}
                     alt={r.title}
@@ -352,120 +434,135 @@ export default function FeedPage() {
                         fontSize: ".8rem",
                       }}
                     >
-                      {r.prep_time && <span>⏱ {r.prep_time}</span>}
-                      {r.cook_time && <span>🔥 {r.cook_time}</span>}
-                      {r.difficulty && <span>💪 {r.difficulty}</span>}
+                      {r.prep_time && <span><Clock size={14} /> {r.prep_time}</span>}
+                      {r.cook_time && <span><Fire size={14} /> {r.cook_time}</span>}
+                      {r.difficulty && <span><Gauge size={14} /> {r.difficulty}</span>}
                     </div>
                   )}
                 </div>
 
+                  
                 {/* ACTION BAR */}
                 <div
-                  style={{
-                    padding: "0.75rem 1rem 1rem",
+                style={{
+                    padding: "0.6rem 0.8rem",
                     display: "flex",
-                    justifyContent: "space-between",
                     alignItems: "center",
+                    justifyContent: "space-between",
                     borderTop: "1px solid #eee",
-                  }}
+                    gap: 8,
+                }}
                 >
-                  {/* LEFT SIDE */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-
+                {/* LEFT ACTIONS */}
+                <div
+                    style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    fontSize: ".9rem",
+                    flexShrink: 0,
+                    }}
+                >
                     {/* LIKE */}
                     <div
-                      onClick={() => toggleLike(r.id)}
-                      className="heart-interact"
-                      style={{
-                        cursor: "pointer",
+                    onClick={() => toggleLike(r.id)}
+                    style={{
                         display: "flex",
                         alignItems: "center",
-                        gap: 5,
-                        minWidth: 55,
-                      }}
+                        gap: 4,
+                        cursor: "pointer",
+                    }}
                     >
-                      <Heart
-                        size={22}
-                        fill={likedRecipes.includes(r.id) ? "red" : "none"}
-                        color={likedRecipes.includes(r.id) ? "red" : "#999"}
-                        className={likedRecipes.includes(r.id) ? "heart-pop" : ""}
-                      />
-                      <span style={{ fontSize: ".9rem", color: "#444" }}>
-                        {r.likes_count}
-                      </span>
+                    <Heart
+                        size={18}
+                        weight={likedRecipes.includes(r.id) ? "fill" : "regular"}
+                        color={likedRecipes.includes(r.id) ? "#e53935" : "#555"}
+                    />
+                    {r.likes_count}
                     </div>
 
-                    {/* ADD BUTTON */}
+                    {/* ADD / REMOVE */}
                     {!isOwn && (
                     <div
-                        onClick={() => addToMyRecipes(r.id, r.user_id)}
-                        className="action-tap"
+                        onClick={() => toggleSaveRecipe(r.id, r.user_id)}
                         style={{
-                        cursor: "pointer",
                         display: "flex",
                         alignItems: "center",
-                        gap: 5,
-                        color: "var(--brand)",
+                        gap: 4,
+                        cursor: "pointer",
                         fontWeight: 600,
-                        fontSize: ".9rem",
+                        color: savedRecipes.includes(r.id)
+                            ? "var(--danger)"
+                            : "var(--brand)",
                         }}
                     >
-                        ➕ Add
+                        {savedRecipes.includes(r.id) ? (
+                        <>
+                            <X size={16} /> Remove
+                        </>
+                        ) : (
+                        <>
+                            <BookmarkSimple size={16} /> Add
+                        </>
+                        )}
                     </div>
                     )}
 
-
                     {/* COMMENTS */}
                     <div
-                      style={{
+                    style={{
                         display: "flex",
                         alignItems: "center",
-                        gap: 5,
-                        minWidth: 55,
-                      }}
+                        gap: 4,
+                        color: "#555",
+                    }}
                     >
-                      <span style={{ color: "#777", fontSize: ".95rem" }}>💬</span>
-                      <span style={{ color: "#444", fontSize: ".9rem" }}>
-                        {r.comments_count}
-                      </span>
+                    <ChatCircleDots size={18} />
+                    {r.comments_count}
                     </div>
-                  </div>
+                </div>
 
-                  {/* AUTHOR */}
-                  {author && (
+                {/* AUTHOR */}
+                {author && (
                     <Link
-                      to={`/u/${author.id}`}
-                      style={{
+                    to={`/u/${author.id}`}
+                    style={{
                         display: "flex",
                         alignItems: "center",
-                        gap: 8,
-                      }}
+                        gap: 6,
+                        minWidth: 0,
+                    }}
                     >
-                      <img
+                    <img
                         src={avatarUrl(author.avatar_url)}
                         style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: "50%",
-                          objectFit: "cover",
+                        width: 26,
+                        height: 26,
+                        borderRadius: "50%",
+                        objectFit: "cover",
+                        flexShrink: 0,
                         }}
-                      />
-                      <span
+                    />
+                    <span
                         style={{
-                            color: "#555",
-                            fontSize: ".88rem",
-                            fontWeight: 500,
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "clip",   // no ellipsis
-                            maxWidth: "100%",       // allow full width
+                        fontSize: ".85rem",
+                        fontWeight: 500,
+                        color: "#444",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        maxWidth: 90,
                         }}
-                        >
+                    >
                         {author.username}
-                      </span>
+                    </span>
                     </Link>
-                  )}
+                )}
                 </div>
+
+
+
+
               </article>
             );
           })}

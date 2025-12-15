@@ -1,6 +1,18 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { Link, useNavigate } from "react-router-dom";
+import {
+  Heart,
+  BookmarkSimple,
+  X,
+  Trash,
+  PencilSimple,
+  Clock,
+  Fire,
+  Gauge,
+  MapPin, 
+} from "phosphor-react";
+
 
 type Profile = {
   id: string;
@@ -183,7 +195,7 @@ export default function MyAccountPage() {
             <h2 style={{ color: "var(--brand)", marginTop: "1rem", fontWeight: 800 }}>
               {edit.username || "Unnamed User"}
             </h2>
-            {edit.location && <p style={{ color: "#666" }}>📍 {edit.location}</p>}
+            {edit.location && <p style={{ color: "#666" }}><MapPin size={16} weight="fill" /> {edit.location}</p>}
             {edit.bio && (
               <p style={{ color: "#444", marginTop: 4, maxWidth: 720, textAlign: "center" }}>{edit.bio}</p>
             )}
@@ -371,16 +383,16 @@ export default function MyAccountPage() {
                   {tab === "own" ? (
                     <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                       <button className="btn btn-secondary" onClick={() => navigate(`/edit/${r.id}`)}>
-                        ✏️ Edit
+                      <PencilSimple size={18} /> Edit
                       </button>
                       <button className="btn btn-danger" onClick={() => deleteRecipe(r.id)}>
-                        🗑 Delete
+                        <Trash size={18} /> Delete
                       </button>
                     </div>
                   ) : (
                     <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                       <button className="btn btn-danger" onClick={() => removeAddedRecipe(r.id)}>
-                        🗑 Remove
+                        <Trash size={18} /> Remove
                       </button>
                     </div>
                   )}

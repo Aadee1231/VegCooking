@@ -18,7 +18,12 @@ export async function searchIngredients(q: string): Promise<IngredientRow[]> {
 export async function createIngredient(name: string): Promise<IngredientRow> {
   const { data, error } = await supabase
     .rpc('create_or_get_ingredient', { p_name: name });
-  if (error) throw error;
+  if(error) {
+    if(error.code === "23505") {
+        throw new Error("That ingredient already exists.");
+    }
+    throw error;
+  }
   return data as any;
 }
 

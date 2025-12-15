@@ -10,7 +10,7 @@ const MEALS: Meal[] = ["breakfast", "lunch", "dinner", "snack"];
 
 type PlanRow = {
   id: number;
-  plan_date: string;
+  plan_date: string; 
   meal: Meal;
   location: "home" | "outside";
   recipe_id: number | null;

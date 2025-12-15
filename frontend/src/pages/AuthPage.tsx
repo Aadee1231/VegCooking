@@ -12,7 +12,7 @@ export default function AuthPage() {
     e.preventDefault();
     setLoading(true);
 
-    if (isSignup) {
+    if (isSignup) { 
         // SIGN UP
         const { error } = await supabase.auth.signUp({
         email,
