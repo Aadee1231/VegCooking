@@ -47,6 +47,415 @@ cookApp.add_middleware(
     allow_headers=["*"],
 )
 
+def _setup_video_processing(video: UploadFile, temp_dir: str) -> tuple[Path, Path, List[str]]:
+    """Setup video processing: save upload, extract audio and frames."""
+    td_path = Path(temp_dir)
+    video_path = td_path / f"upload_{video.filename}"
+    audio_path = td_path / "audio.wav"
+    frames_dir = td_path / "frames"
+
+    contents = video.file.read()
+    video_path.write_bytes(contents)
+
+    extract_audio(str(video_path), str(audio_path)) 
+    frame_paths = extract_frames(str(video_path), str(frames_dir), fps=1.5, max_frames=18)
+    
+    return audio_path, frame_paths
+
+def _transcribe_audio(audio_path: Path) -> str:
+    """Transcribe audio using OpenAI."""
+    with open(audio_path, "rb") as f:
+        transcript_obj = openai_client.audio.transcriptions.create(
+            model="gpt-4o-mini-transcribe",
+            file=f,
+        )
+    return getattr(transcript_obj, "text", "") or ""
+
+def _get_raw_extraction_schema() -> dict:
+    """Get the JSON schema for raw recipe extraction."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "raw_ingredients": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "name": { "type": "string" },
+                        "quantity_text": { "type": ["string", "null"] },
+                        "source": { "type": "string", "enum": ["spoken", "visual", "assumed"] }
+                    },
+                    "required": ["name", "quantity_text", "source"]
+                }
+            },
+            "raw_steps": {"type": "array", "items": {"type": "string"}},
+            "oven_temp": {"type": ["string", "null"]},
+            "bake_time": {"type": ["string", "null"]},
+            "pan_size": {"type": ["string", "null"]},
+            "servings_hint": {"type": ["string", "null"]},
+        },
+        "required": ["raw_ingredients", "raw_steps", "oven_temp", "bake_time", "pan_size", "servings_hint"],
+    }
+
+def _extract_raw_recipe_data(transcript_text: str, frame_paths: List[str]) -> dict:
+    """Extract raw recipe data from transcript and video frames."""
+    images = [{"type": "input_image", "image_url": to_data_url_jpg(p)} for p in frame_paths]
+    raw_schema = _get_raw_extraction_schema()
+    
+    raw_prompt = f"""
+You are extracting cooking info from a video.
+
+Goal: CAPTURE EVERYTHING mentioned or shown. Completeness > cleanliness.
+
+Rules:
+- Do NOT summarize.
+- Do NOT normalize ingredient names.
+- Include ALL ingredients even if minor (nuts, water, flour, toppings, add-ins).
+- Include ALL steps including prep, mixing, baking, cooling, serving.
+- If something is mentioned or shown, include it.
+- Output ONLY valid JSON.
+
+IMPORTANT INFERENCE RULES:
+
+- If a baked dessert batter is shown or described,
+  and flour is NOT mentioned verbally,
+  you MUST still include "flour" as an ingredient.
+
+- If chopped nuts are visible in ANY frame,
+  include them explicitly (e.g. "walnuts"),
+  even if not spoken.
+
+- If an ingredient is visually obvious but not spoken,
+  include it and set source = "visual".
+
+- If an ingredient is REQUIRED for the recipe to function
+  (e.g. flour in brownies, walnuts or chocolate shards on top, etc.),
+  include it and set source = "assumed".
+
+
+Transcript:
+{transcript_text}
+"""
+
+    raw_input_payload = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": raw_prompt},
+                *images,
+            ],
+        }
+    ]
+
+    raw_text_payload = {
+        "format": {
+            "type": "json_schema",
+            "name": "raw_extraction",
+            "schema": raw_schema,
+        }
+    }
+
+    raw_resp = openai_client.responses.create(
+        model="gpt-4o-mini",
+        input=cast(Any, raw_input_payload),
+        text=cast(Any, raw_text_payload),
+    )
+
+    try:
+        raw_data = json.loads(raw_resp.output_text)
+        if DEBUG_IMPORT:
+            print("========== RAW EXTRACTION ==========")
+            print("RAW INGREDIENTS:")
+            for i, ing in enumerate(raw_data.get("raw_ingredients", []), 1):
+                print(f"{i}. {ing}")
+
+            print("\nRAW STEPS:")
+            for i, step in enumerate(raw_data.get("raw_steps", []), 1):
+                print(f"{i}. {step}")
+
+            print("\nMETA:")
+            print("oven_temp:", raw_data.get("oven_temp"))
+            print("bake_time:", raw_data.get("bake_time"))
+            print("pan_size:", raw_data.get("pan_size"))
+            print("servings_hint:", raw_data.get("servings_hint"))
+            print("===================================")
+        return raw_data
+    except Exception:
+        raise HTTPException(status_code=500, detail=f"Pass 1 invalid JSON. Raw: {raw_resp.output_text[:400]}")
+
+def _audit_missing_ingredients(raw_data: dict) -> List[str]:
+    """Audit extracted data for missing implied ingredients."""
+    audit_prompt = f"""
+        You are auditing extracted cooking data for missing ingredients.
+
+        RAW INGREDIENTS:
+        {json.dumps(raw_data.get("raw_ingredients", []), indent=2)}
+
+        RAW STEPS:
+        {json.dumps(raw_data.get("raw_steps", []), indent=2)}
+
+        TASK:
+        - Identify any ingredients that are REQUIRED, IMPLIED, or VISUALLY OBVIOUS
+        but missing from RAW INGREDIENTS.
+        - Examples:
+        - Flour in brownies or cakes
+        - Walnuts or nuts if nut brownies
+        - Chocolate chunks if visible
+        - Baking pan grease
+        - Do NOT repeat existing ingredients.
+        - Do NOT invent quantities.
+
+        Return ONLY valid JSON in this exact shape:
+        {{
+        "missing_ingredients": [string]
+        }}
+        """
+
+    audit_resp = openai_client.responses.create(
+        model="gpt-4o-mini",
+        input=[
+            {
+                "role": "user",
+                "content": [{"type": "input_text", "text": audit_prompt}],
+            }
+        ],
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "audit_result",
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "missing_ingredients": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                        }
+                    },
+                    "required": ["missing_ingredients"]
+                }
+            }
+        }
+    )
+
+    audit_data = json.loads(audit_resp.output_text)
+    return audit_data.get("missing_ingredients", [])
+
+def _merge_missing_ingredients(raw_data: dict, missing_ingredients: List[str]) -> None:
+    """Merge missing ingredients into raw_data."""
+    existing_norms = {
+        norm_name(ing["name"])
+        for ing in raw_data.get("raw_ingredients", [])
+    }
+
+    for name in missing_ingredients:
+        if norm_name(name) in existing_norms:
+            continue
+
+        raw_data["raw_ingredients"].append({
+            "name": name,
+            "quantity_text": None,
+            "source": "assumed"
+        })
+
+    if DEBUG_IMPORT:
+        print("========== SANITY CHECK ==========")
+        print("Added inferred ingredients:", missing_ingredients)
+        print("=================================")
+
+def _get_final_recipe_schema() -> dict:
+    """Get the JSON schema for final recipe structuring."""
+    return {
+        "name": "recipe_draft",
+        "schema": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "title": {"type": "string"},
+                "caption": {"type": ["string", "null"]},
+                "description": {"type": ["string", "null"]},
+                "servings": {"type": ["integer", "null"]},
+                "prep_time": {"type": ["string", "null"]},
+                "cook_time": {"type": ["string", "null"]},
+                "difficulty": {"type": ["string", "null"], "enum": ["Easy", "Medium", "Hard", None]},
+                "tags": {"type": "array", "items": {"type": "string"}},
+                "ingredients": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "name": {"type": "string"},
+                            "ingredient_id": {"type": ["integer", "null"]},
+                            "quantity": {"type": ["number", "null"]},
+                            "unit": {"type": ["string", "null"]},
+                            "notes": {"type": ["string", "null"]},
+                        },
+                        "required": ["name", "ingredient_id", "quantity", "unit", "notes"],
+                    },
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False, 
+                        "properties": {
+                            "position": {"type": "integer"},
+                            "body": {"type": "string"},
+                        },
+                        "required": ["position", "body"],
+                    },
+                },
+            },
+            "required": ["title", "caption", "description", "servings", "prep_time", "cook_time", "difficulty", "tags", "ingredients", "steps"],
+        },
+        "strict": True,
+    }
+
+def _structure_final_recipe(raw_data: dict, transcript_text: str) -> dict:
+    """Structure the final recipe from raw extracted data."""
+    schema = _get_final_recipe_schema()
+    
+    prompt_text = f"""
+You are converting a cooking video into a clean recipe JSON.
+
+You MUST use the extracted lists below as source-of-truth.
+Do not omit items from them.
+
+RAW_INGREDIENTS (source-of-truth):
+{json.dumps(raw_data.get("raw_ingredients", []), ensure_ascii=False)}
+
+RAW_STEPS (source-of-truth):
+{json.dumps(raw_data.get("raw_steps", []), ensure_ascii=False)}
+
+Hints:
+- oven_temp: {raw_data.get("oven_temp")}
+- bake_time: {raw_data.get("bake_time")}
+- pan_size: {raw_data.get("pan_size")}
+- servings_hint: {raw_data.get("servings_hint")}
+
+Rules:
+- Return ONLY valid JSON that matches the schema. No extra keys, no markdown.
+- Every RAW_INGREDIENT must appear in ingredients[] (normalized).
+- Every ingredient must be used in at least one step.
+- Steps must cover full process start→finish (preheat, mix, add-ins, pan, bake, cool, serve).
+- ingredient_id must be null (server will fill it).
+- Diet tags:
+  - No animal products => Vegan (and NOT Vegetarian).
+  - Dairy present but no eggs => Vegetarian (and NOT Vegan).
+  - Never include both.
+- If baking is present, cook_time MUST be filled.
+
+
+ACCURACY + COMPLETENESS (MOST IMPORTANT)
+- Produce a COMPLETE recipe: do not omit ingredients or steps that appear in the transcript or on-screen text.
+- If any ingredient is mentioned in transcript OR visible on screen, it MUST appear in the ingredients list.
+- Every ingredient in the ingredients list MUST be used in at least one step.
+- Steps MUST cover the entire process from start to finish (prep → cook/bake → cool/finish).
+
+TITLE
+- Title must be specific and correct (ex: "Vegan Brownies").
+- Do NOT use generic titles like "Chocolate Cake" unless the recipe is explicitly cake.
+- If baked in a square/rectangular pan and sliced into squares/bars, prefer "brownies" or "bars" over "cake".
+
+DIET TAG LOGIC (HARD RULES)
+- If there are NO animal products (no eggs, dairy, meat, honey), include tag "Vegan".
+- If eggs are absent but dairy is present, include tag "Vegetarian" (and do NOT include Vegan).
+- Never include both "Vegan" and "Vegetarian" together.
+- Tags must come only from this set if relevant:
+  Vegan, Vegetarian, Gluten-Free, Dairy-Free, Healthy, Dessert, Comfort Food, Quick, Breakfast, Dinner, Spicy
+- Only include tags that are clearly supported by the recipe.
+
+SERVINGS + TIMES
+- If servings are stated, use them.
+- If not stated, infer servings using pan size or typical yield or ingredient quantity (ex: "9" for a 9-inch square pan).
+- If baking is present, cook_time MUST be included and must reflect the baking time.
+- prep_time should reflect mixing + prep steps (reasonable estimate if not stated).
+- Prefer concise time strings like "10 min" or "12-15 min" (not paragraphs).
+
+INGREDIENTS
+- Ingredients must be normalized to common names (ex: "cocoa powder", "all-purpose flour", "vegetable oil").
+- Include ALL ingredients with correct amounts when available.
+- If a quantity is known but unit is unclear, set unit to null.
+- If both quantity and unit are unknown, set both to null, but still include the ingredient name.
+- If an ingredient is "divided or chopped" (ex: chocolate shards), keep it as ONE ingredient and put "divided" in notes.
+
+STEPS
+- MAKE STEPS AS DETAILED AS POSSIBLE FOR USERS
+- Steps must be short, clear, and in correct order.
+- Include temperatures and baking times exactly if stated; otherwise infer from context only if strongly implied.
+- Baking recipes MUST include:
+  1) Preheat instruction
+  2) Mixing instructions in correct grouping (dry/wet if relevant)
+  3) Pan size / lining/greasing if mentioned or visible
+  4) Bake temperature + time
+  5) Cooling instruction
+  6) Final serve/slice step
+- Do not collapse the recipe into vague steps like "mix everything"; be specific about what gets added when.
+
+CONSISTENCY CHECK (SELF-VERIFY BEFORE FINAL OUTPUT)
+- Verify no important ingredients are missing (especially add-ins like nuts/chocolate).
+- Verify steps include baking + cooling if baked.
+- Verify tags obey the Vegan/Vegetarian rule.
+
+- If amounts are unknown, set quantity/unit to null.
+- Difficulty must be Easy/Medium/Hard.
+- Do NOT stop early in figuring out steps and writting all the steps in detail.
+- Return ONLY the JSON in the schema.
+Transcript (For extra context if needed):
+{transcript_text}
+"""
+
+    input_payload = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": prompt_text},
+            ],
+        }
+    ]
+
+    text_payload = {
+        "format": {
+            "type": "json_schema",
+            "name": "recipe_draft",      
+            "schema": schema["schema"],       
+        }
+    }
+
+    resp = openai_client.responses.create(
+        model="gpt-4o-mini",
+        input=cast(Any, input_payload),   
+        text=cast(Any, text_payload),     
+    )
+
+    try:
+        data = json.loads(resp.output_text)
+        if DEBUG_IMPORT:
+            print("========== FINAL INGREDIENTS ==========")
+            for i, ing in enumerate(data.get("ingredients", []), 1):
+                print(f"{i}. {ing.get('name')} | qty={ing.get('quantity')} | unit={ing.get('unit')}")
+            print("======================================")
+        return data
+    except Exception:
+        raise HTTPException(status_code=500, detail=f"Model did not return valid JSON. Raw: {resp.output_text[:400]}")
+
+def _resolve_ingredient_ids(data: dict, created_by: Optional[int] = None) -> None:
+    """Resolve or create ingredient IDs for all ingredients."""
+    ingredient_map = load_ingredient_map()
+
+    for ing in data.get("ingredients", []):
+        name = (ing.get("name") or "").strip()
+        if not name:
+            continue
+        ing["ingredient_id"] = resolve_or_create_ingredient(
+            ingredient_map,
+            name,
+            created_by=created_by
+        )
+
 class RecipeIn(BaseModel):
     title: str
     caption: Optional[str] = None
@@ -213,409 +622,26 @@ async def video_import(video: UploadFile = File(...)):
     if not video.filename:
         raise HTTPException(status_code=400, detail="Missing filename")
 
-    # 1) Save upload to a temp file
     with tempfile.TemporaryDirectory() as td:
-        td_path = Path(td)
-        video_path = td_path / f"upload_{video.filename}"
-        audio_path = td_path / "audio.wav"
-        frames_dir = td_path / "frames"
-
-        contents = await video.read()
-        video_path.write_bytes(contents)
-
-        # 2) Extract audio + frames
-        extract_audio(str(video_path), str(audio_path)) 
-        frame_paths = extract_frames(str(video_path), str(frames_dir), fps=1.5, max_frames=18)
-
-        # 3) Transcribe audio (OpenAI)
-        # Models documented here: gpt-4o-mini-transcribe, whisper-1, etc
-        with open(audio_path, "rb") as f:
-            transcript_obj = openai_client.audio.transcriptions.create(
-                model="gpt-4o-mini-transcribe",
-                file=f,
-            )
-        transcript_text = getattr(transcript_obj, "text", "") or ""
-
-        # 4) Build vision inputs from frames
-        # Vision inputs: data URLs / image inputs supported 
-        images = [{"type": "input_image", "image_url": to_data_url_jpg(p)} for p in frame_paths]
-
-        raw_schema = {
-            "type": "object",
-            "additionalProperties": False,
-            "properties": {
-                "raw_ingredients": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "additionalProperties": False,
-                        "properties": {
-                            "name": { "type": "string" },
-                            "quantity_text": { "type": ["string", "null"] },
-                            "source": { "type": "string", "enum": ["spoken", "visual", "assumed"] }
-                        },
-                        "required": ["name", "quantity_text", "source"]
-                    }
-                },
-                "raw_steps": {"type": "array", "items": {"type": "string"}},
-                "oven_temp": {"type": ["string", "null"]},
-                "bake_time": {"type": ["string", "null"]},
-                "pan_size": {"type": ["string", "null"]},
-                "servings_hint": {"type": ["string", "null"]},
-            },
-            "required": ["raw_ingredients", "raw_steps", "oven_temp", "bake_time", "pan_size", "servings_hint"],
-        }
- 
-        raw_prompt = f"""
-You are extracting cooking info from a video.
-
-Goal: CAPTURE EVERYTHING mentioned or shown. Completeness > cleanliness.
-
-Rules:
-- Do NOT summarize.
-- Do NOT normalize ingredient names.
-- Include ALL ingredients even if minor (nuts, water, flour, toppings, add-ins).
-- Include ALL steps including prep, mixing, baking, cooling, serving.
-- If something is mentioned or shown, include it.
-- Output ONLY valid JSON.
-
-IMPORTANT INFERENCE RULES:
-
-- If a baked dessert batter is shown or described,
-  and flour is NOT mentioned verbally,
-  you MUST still include "flour" as an ingredient.
-
-- If chopped nuts are visible in ANY frame,
-  include them explicitly (e.g. "walnuts"),
-  even if not spoken.
-
-- If an ingredient is visually obvious but not spoken,
-  include it and set source = "visual".
-
-- If an ingredient is REQUIRED for the recipe to function
-  (e.g. flour in brownies, walnuts or chocolate shards on top, etc.),
-  include it and set source = "assumed".
-
-
-Transcript:
-{transcript_text}
-"""
-
-        raw_input_payload = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "input_text", "text": raw_prompt},
-                    *images,
-                ],
-            }
-        ]
-
-        raw_text_payload = {
-            "format": {
-                "type": "json_schema",
-                "name": "raw_extraction",
-                "schema": raw_schema,
-            }
-        }
-
-        raw_resp = openai_client.responses.create(
-            model="gpt-4o-mini",
-            input=cast(Any, raw_input_payload),
-            text=cast(Any, raw_text_payload),
-        )
-
-        try:
-            raw_data = json.loads(raw_resp.output_text)
-            if DEBUG_IMPORT:
-                print("========== RAW EXTRACTION ==========")
-            if DEBUG_IMPORT:
-                print("RAW INGREDIENTS:")
-                for i, ing in enumerate(raw_data.get("raw_ingredients", []), 1):
-                    print(f"{i}. {ing}")
-
-                print("\nRAW STEPS:")
-                for i, step in enumerate(raw_data.get("raw_steps", []), 1):
-                    print(f"{i}. {step}")
-
-                print("\nMETA:")
-                print("oven_temp:", raw_data.get("oven_temp"))
-                print("bake_time:", raw_data.get("bake_time"))
-                print("pan_size:", raw_data.get("pan_size"))
-                print("servings_hint:", raw_data.get("servings_hint"))
-                print("===================================")
-        except Exception:
-            raise HTTPException(status_code=500, detail=f"Pass 1 invalid JSON. Raw: {raw_resp.output_text[:400]}")
+        # Setup video processing and extract audio/frames
+        audio_path, frame_paths = _setup_video_processing(video, td)
         
+        # Transcribe audio
+        transcript_text = _transcribe_audio(audio_path)
         
-        # 4.5) SANITY CHECK — find missing but implied ingredients
-        audit_prompt = f"""
-        You are auditing extracted cooking data for missing ingredients.
-
-        RAW INGREDIENTS:
-        {json.dumps(raw_data.get("raw_ingredients", []), indent=2)}
-
-        RAW STEPS:
-        {json.dumps(raw_data.get("raw_steps", []), indent=2)}
-
-        TASK:
-        - Identify any ingredients that are REQUIRED, IMPLIED, or VISUALLY OBVIOUS
-        but missing from RAW INGREDIENTS.
-        - Examples:
-        - Flour in brownies or cakes
-        - Walnuts or nuts if nut brownies
-        - Chocolate chunks if visible
-        - Baking pan grease
-        - Do NOT repeat existing ingredients.
-        - Do NOT invent quantities.
-
-        Return ONLY valid JSON in this exact shape:
-        {{
-        "missing_ingredients": [string]
-        }}
-        """
-
-        audit_resp = openai_client.responses.create(
-            model="gpt-4o-mini",
-            input=[
-                {
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": audit_prompt}],
-                }
-            ],
-            text={
-                "format": {
-                    "type": "json_schema",
-                    "name": "audit_result",
-                    "schema": {
-                        "type": "object",
-                        "additionalProperties": False,
-                        "properties": {
-                            "missing_ingredients": {
-                                "type": "array",
-                                "items": {"type": "string"}
-                            }
-                        },
-                        "required": ["missing_ingredients"]
-                    }
-                }
-            }
-        )
-
-        audit_data = json.loads(audit_resp.output_text)
-        missing = audit_data.get("missing_ingredients", [])
-
-        # Merge missing ingredients into raw_ingredients
-        existing_norms = {
-            norm_name(ing["name"])
-            for ing in raw_data.get("raw_ingredients", [])
-        }
-
-        for name in missing:
-            if norm_name(name) in existing_norms:
-                continue
-
-            raw_data["raw_ingredients"].append({
-                "name": name,
-                "quantity_text": None,
-                "source": "assumed"
-            })
-
-        print("========== SANITY CHECK ==========")
-        print("Added inferred ingredients:", missing)
-        print("=================================")
-
-
-        # 5) Ask model to produce STRICT JSON (Structured Outputs) 
-        schema = {
-            "name": "recipe_draft",
-            "schema": {
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "title": {"type": "string"},
-                    "caption": {"type": ["string", "null"]},
-                    "description": {"type": ["string", "null"]},
-                    "servings": {"type": ["integer", "null"]},
-                    "prep_time": {"type": ["string", "null"]},
-                    "cook_time": {"type": ["string", "null"]},
-                    "difficulty": {"type": ["string", "null"], "enum": ["Easy", "Medium", "Hard", None]},
-                    "tags": {"type": "array", "items": {"type": "string"}},
-                    "ingredients": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "properties": {
-                                "name": {"type": "string"},
-                                "ingredient_id": {"type": ["integer", "null"]},
-                                "quantity": {"type": ["number", "null"]},
-                                "unit": {"type": ["string", "null"]},
-                                "notes": {"type": ["string", "null"]},
-                            },
-                            "required": ["name", "ingredient_id", "quantity", "unit", "notes"],
-                        },
-                    },
-                    "steps": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": False, 
-                            "properties": {
-                                "position": {"type": "integer"},
-                                "body": {"type": "string"},
-                            },
-                            "required": ["position", "body"],
-                        },
-                    },
-                },
-                "required": ["title", "caption", "description", "servings", "prep_time", "cook_time", "difficulty", "tags", "ingredients", "steps"],
-            },
-            "strict": True,
-        }
-
-        prompt_text = f"""
-You are converting a cooking video into a clean recipe JSON.
-
-You MUST use the extracted lists below as source-of-truth.
-Do not omit items from them.
-
-RAW_INGREDIENTS (source-of-truth):
-{json.dumps(raw_data.get("raw_ingredients", []), ensure_ascii=False)}
-
-RAW_STEPS (source-of-truth):
-{json.dumps(raw_data.get("raw_steps", []), ensure_ascii=False)}
-
-Hints:
-- oven_temp: {raw_data.get("oven_temp")}
-- bake_time: {raw_data.get("bake_time")}
-- pan_size: {raw_data.get("pan_size")}
-- servings_hint: {raw_data.get("servings_hint")}
-
-Rules:
-- Return ONLY valid JSON that matches the schema. No extra keys, no markdown.
-- Every RAW_INGREDIENT must appear in ingredients[] (normalized).
-- Every ingredient must be used in at least one step.
-- Steps must cover full process start→finish (preheat, mix, add-ins, pan, bake, cool, serve).
-- ingredient_id must be null (server will fill it).
-- Diet tags:
-  - No animal products => Vegan (and NOT Vegetarian).
-  - Dairy present but no eggs => Vegetarian (and NOT Vegan).
-  - Never include both.
-- If baking is present, cook_time MUST be filled.
-
-
-ACCURACY + COMPLETENESS (MOST IMPORTANT)
-- Produce a COMPLETE recipe: do not omit ingredients or steps that appear in the transcript or on-screen text.
-- If any ingredient is mentioned in transcript OR visible on screen, it MUST appear in the ingredients list.
-- Every ingredient in the ingredients list MUST be used in at least one step.
-- Steps MUST cover the entire process from start to finish (prep → cook/bake → cool/finish).
-
-TITLE
-- Title must be specific and correct (ex: "Vegan Brownies").
-- Do NOT use generic titles like "Chocolate Cake" unless the recipe is explicitly cake.
-- If baked in a square/rectangular pan and sliced into squares/bars, prefer "brownies" or "bars" over "cake".
-
-DIET TAG LOGIC (HARD RULES)
-- If there are NO animal products (no eggs, dairy, meat, honey), include tag "Vegan".
-- If eggs are absent but dairy is present, include tag "Vegetarian" (and do NOT include Vegan).
-- Never include both "Vegan" and "Vegetarian" together.
-- Tags must come only from this set if relevant:
-  Vegan, Vegetarian, Gluten-Free, Dairy-Free, Healthy, Dessert, Comfort Food, Quick, Breakfast, Dinner, Spicy
-- Only include tags that are clearly supported by the recipe.
-
-SERVINGS + TIMES
-- If servings are stated, use them.
-- If not stated, infer servings using pan size or typical yield or ingredient quantity (ex: "9" for a 9-inch square pan).
-- If baking is present, cook_time MUST be included and must reflect the baking time.
-- prep_time should reflect mixing + prep steps (reasonable estimate if not stated).
-- Prefer concise time strings like "10 min" or "12-15 min" (not paragraphs).
-
-INGREDIENTS
-- Ingredients must be normalized to common names (ex: "cocoa powder", "all-purpose flour", "vegetable oil").
-- Include ALL ingredients with correct amounts when available.
-- If a quantity is known but unit is unclear, set unit to null.
-- If both quantity and unit are unknown, set both to null, but still include the ingredient name.
-- If an ingredient is "divided or chopped" (ex: chocolate shards), keep it as ONE ingredient and put "divided" in notes.
-
-STEPS
-- MAKE STEPS AS DETAILED AS POSSIBLE FOR USERS
-- Steps must be short, clear, and in correct order.
-- Include temperatures and baking times exactly if stated; otherwise infer from context only if strongly implied.
-- Baking recipes MUST include:
-  1) Preheat instruction
-  2) Mixing instructions in correct grouping (dry/wet if relevant)
-  3) Pan size / lining/greasing if mentioned or visible
-  4) Bake temperature + time
-  5) Cooling instruction
-  6) Final serve/slice step
-- Do not collapse the recipe into vague steps like "mix everything"; be specific about what gets added when.
-
-CONSISTENCY CHECK (SELF-VERIFY BEFORE FINAL OUTPUT)
-- Verify no important ingredients are missing (especially add-ins like nuts/chocolate).
-- Verify steps include baking + cooling if baked.
-- Verify tags obey the Vegan/Vegetarian rule.
-
-- If amounts are unknown, set quantity/unit to null.
-- Difficulty must be Easy/Medium/Hard.
-- Do NOT stop early in figuring out steps and writting all the steps in detail.
-- Return ONLY the JSON in the schema.
-Transcript (For extra context if needed):
-{transcript_text}
-"""
-
-        input_payload = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "input_text", "text": prompt_text},
-                ],
-            }
-        ]
-
-        text_payload = {
-            "format": {
-                "type": "json_schema",
-                "name": "recipe_draft",      
-                "schema": schema["schema"],       
-            }
-        }
-
-        resp = openai_client.responses.create(
-            model="gpt-4o-mini",
-            input=cast(Any, input_payload),   
-            text=cast(Any, text_payload),     
-        )
-
-
-
-        # 6) Parse JSON
-        raw = resp.output_text
-        try:
-            data = json.loads(raw)
-            print("========== FINAL INGREDIENTS ==========")
-            for i, ing in enumerate(data.get("ingredients", []), 1):
-                print(f"{i}. {ing.get('name')} | qty={ing.get('quantity')} | unit={ing.get('unit')}")
-            print("======================================")
-        except Exception:
-            raise HTTPException(status_code=500, detail=f"Model did not return valid JSON. Raw: {raw[:400]}")
+        # Extract raw recipe data
+        raw_data = _extract_raw_recipe_data(transcript_text, frame_paths)
         
-        ingredient_map = load_ingredient_map()
-
-        # To set created_by, you'll need to pass user_id into this route later.
-        created_by = None
-
-        for ing in data.get("ingredients", []):
-            name = (ing.get("name") or "").strip()
-            if not name:
-                continue
-            ing["ingredient_id"] = resolve_or_create_ingredient(
-                ingredient_map,
-                name,
-                created_by=created_by
-            )
-
-        # 7) Pydantic validates shape
+        # Audit for missing ingredients
+        missing_ingredients = _audit_missing_ingredients(raw_data)
+        _merge_missing_ingredients(raw_data, missing_ingredients)
+        
+        # Structure final recipe
+        data = _structure_final_recipe(raw_data, transcript_text)
+        
+        # Resolve ingredient IDs
+        _resolve_ingredient_ids(data, created_by=None)
+        
+        # Return response
         from fastapi.responses import JSONResponse
-
         return JSONResponse(content=data)
