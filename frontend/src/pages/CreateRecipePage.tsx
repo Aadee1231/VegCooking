@@ -35,6 +35,7 @@ type Line = {
 };
 type AIIngredient = {
   name: string;
+  ingredient_id?: number | null;
   quantity?: number | null;
   unit?: string | null;
   notes?: string | null;
@@ -280,6 +281,90 @@ export default function CreateRecipePage() {
   const [difficulty, setDifficulty] = useState("");
   const [demoUrl, setDemoUrl] = useState("");
 
+  //AI Import
+  const [importVideo, setImportVideo] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  /* -------------------------------------------------------------
+  AI Import Video
+  ------------------------------------------------------------- */
+    async function importFromVideo() {
+        if (!importVideo) {
+            window.vcToast("Upload a video first.");
+            return;
+        }
+
+        setImporting(true);
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+            controller.abort();
+        }, 180_000); // 3 minutes
+
+        try {
+            const fd = new FormData();
+            fd.append("video", importVideo);
+
+            const base = import.meta.env.VITE_API_BASE_URL;
+
+            const res = await fetch(`${base}/video-import`, {
+            method: "POST",
+            body: fd,
+            signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || "Video import failed");
+            }
+
+            const draft = await res.json();
+
+            // ⬇️ Populate state
+            setTitle(draft.title ?? "");
+            setCaption(draft.caption ?? "");
+            setDescription(draft.description ?? "");
+            setServings(draft.servings ?? "");
+            setPrepTime(draft.prep_time ?? "");
+            setCookTime(draft.cook_time ?? "");
+            setDifficulty(draft.difficulty ?? "");
+            setTags(draft.tags ?? []);
+
+            setSteps(
+            draft.steps.map((s: any, i: number) => ({
+                position: i + 1,
+                body: s.body ?? "",
+            }))
+            );
+
+            setLines(
+            draft.ingredients.map((ing: any, i: number) => ({
+                position: i + 1,
+                ingredient: ing.ingredient_id
+                ? { id: ing.ingredient_id, name: ing.name, created_by: null }
+                : null,
+                quantity: ing.quantity ?? null,
+                unit_code: ing.unit ?? null,
+                notes: ing.notes ?? null,
+            }))
+            );
+
+            window.vcToast("Imported! Review before saving.");
+        } catch (err: any) {
+            if (err.name === "AbortError") {
+            window.vcToast("Import timed out. Try again.");
+            } else {
+            window.vcToast(err.message || "Import failed");
+            }
+        } finally {
+            clearTimeout(timeoutId);
+            setImporting(false);
+        }
+    }
+
+
 
 
 
@@ -297,7 +382,7 @@ export default function CreateRecipePage() {
       const { data: rec } = await supabase
         .from("recipes")
         .select("*")
-        .eq("id", id)
+        .eq("id", id) 
         .single();
 
       if (!rec) return;
@@ -373,7 +458,6 @@ export default function CreateRecipePage() {
         );
         }
  
-    
 
       setLoading(true);
       const { data } = await supabase.auth.getUser();
@@ -516,6 +600,28 @@ export default function CreateRecipePage() {
         />
 
         {/* META INFO */}
+        <h3 style={{ color: "var(--brand)", marginTop: 20 }}>Import from Video</h3>
+
+        <input
+        type="file"
+        accept="video/*"
+        onChange={(e) => setImportVideo(e.target.files?.[0] ?? null)}
+        />
+
+        <button
+        type="button"
+        className="btn"
+        onClick={importFromVideo}
+        disabled={importing}
+        style={{ marginTop: 10 }}
+        >
+        {importing ? "Importing..." : "Import from Video"}
+        </button>
+
+        <small style={{ color: "#777" }}>
+        Upload a cooking video and we’ll auto-fill the recipe. You can edit everything before saving.
+        </small>
+
         <h3 style={{ color: "var(--brand)", marginTop: 20 }}>Details</h3>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>
           <div style={{ flex: "1 1 200px" }}>
@@ -609,6 +715,7 @@ export default function CreateRecipePage() {
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {TAG_OPTIONS.map((t) => (
             <button
+              type = "button"
               key={t}
               className={`btn ${tags.includes(t) ? "" : "btn-secondary"}`}
               onClick={() => setTags((p) => (p.includes(t) ? p.filter((x) => x !== t) : [...p, t]))}
