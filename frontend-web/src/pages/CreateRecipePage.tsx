@@ -284,10 +284,78 @@ export default function CreateRecipePage() {
   //AI Import
   const [importVideo, setImportVideo] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
 
   /* -------------------------------------------------------------
   AI Import Video
   ------------------------------------------------------------- */
+  async function importFromLink() {
+  const url = importUrl.trim();
+  if (!url) return window.vcToast("Paste a video link first.");
+
+  setImporting(true);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 180_000);
+
+  try {
+    const base = import.meta.env.VITE_API_BASE_URL;
+
+    const res = await fetch(`${base}/video-import-url`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || "Link import failed");
+    }
+
+    const draft = await res.json();
+
+    // same population logic you already do
+    setTitle(draft.title ?? "");
+    setCaption(draft.caption ?? "");
+    setDescription(draft.description ?? "");
+    setServings(draft.servings ?? "");
+    setPrepTime(draft.prep_time ?? "");
+    setCookTime(draft.cook_time ?? "");
+    setDifficulty(draft.difficulty ?? "");
+    setTags(draft.tags ?? []);
+
+    setSteps(
+      (draft.steps ?? []).map((s: any, i: number) => ({
+        position: i + 1,
+        body: s.body ?? "",
+      }))
+    );
+
+    setLines(
+      (draft.ingredients ?? []).map((ing: any, i: number) => ({
+        position: i + 1,
+        ingredient: ing.ingredient_id
+          ? { id: ing.ingredient_id, name: ing.name, created_by: null }
+          : null,
+        quantity: ing.quantity ?? null,
+        unit_code: ing.unit ?? null,
+        notes: ing.notes ?? null,
+      }))
+    );
+
+    window.vcToast("Imported from link! Review before saving.");
+  } catch (err: any) {
+    if (err.name === "AbortError") window.vcToast("Import timed out. Try again.");
+    else window.vcToast(err.message || "Import failed");
+  } finally {
+    clearTimeout(timeoutId);
+    setImporting(false);
+  }
+}
+
     async function importFromVideo() {
         if (!importVideo) {
             window.vcToast("Upload a video first.");

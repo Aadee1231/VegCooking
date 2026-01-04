@@ -2,7 +2,7 @@ import { useState } from "react";
 import { supabase } from "../lib/supabase";
 
 export default function AuthPage() {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [isSignup, setIsSignup] = useState(false);
@@ -15,7 +15,7 @@ export default function AuthPage() {
     if (isSignup) { 
         // SIGN UP
         const { error } = await supabase.auth.signUp({
-        email,
+        email: identifier,
         password,
         options: {
             data: { username },
@@ -40,7 +40,7 @@ export default function AuthPage() {
 
     // SIGN IN (THIS WAS MISSING!!!)
     const { error } = await supabase.auth.signInWithPassword({
-        email,
+        email: identifier,
         password,
     });
 
@@ -114,12 +114,12 @@ export default function AuthPage() {
             />
           )}
           <input
-            type="email"
-            placeholder="Email address"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email or Username"
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
             required
           />
+
           <input
             type="password"
             placeholder="Password"

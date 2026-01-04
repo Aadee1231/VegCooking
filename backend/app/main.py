@@ -10,6 +10,9 @@ import base64
 import json
 import tempfile
 import subprocess
+import socket
+import ipaddress
+from urllib.parse import urlparse
 from pathlib import Path
 
 from fastapi import UploadFile, File
@@ -493,6 +496,10 @@ class RecipeDraft(BaseModel):
     ingredients: List[DraftIngredient] = []
     steps: List[DraftStep] = []
 
+class VideoUrlIn(BaseModel):
+    url: str
+
+
 
 @cookApp.get("/health")
 def health():
@@ -614,6 +621,62 @@ def resolve_or_create_ingredient(ingredient_map: dict, name: str, created_by: Op
     ingredient_map[key] = created[0]
     return int(created[0]["id"])
 
+def _is_public_http_url(url: str) -> bool:
+    try:
+        u = urlparse(url)
+        if u.scheme not in ("http", "https"):
+            return False
+        if not u.netloc:
+            return False
+
+        host = u.hostname
+        if not host:
+            return False
+
+        # Resolve hostname -> IP and block private/internal ranges
+        ip_str = socket.gethostbyname(host)
+        ip = ipaddress.ip_address(ip_str)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            return False
+
+        return True
+    except Exception:
+        return False
+
+def download_video_from_url(url: str, temp_dir: str) -> Path:
+    """
+    Downloads a low-res MP4 into temp_dir and returns the path.
+    Uses yt-dlp and keeps file only inside temp_dir (auto-deleted by TemporaryDirectory).
+    """
+    outtmpl = str(Path(temp_dir) / "video.%(ext)s")
+
+    # Prefer <=360p mp4 for speed (good enough for frames + transcript)
+    cmd = [
+        "yt-dlp",
+        "--no-playlist",
+        "-f", "bv*[ext=mp4][height<=360]+ba[ext=m4a]/b[ext=mp4][height<=360]/b",
+        "--merge-output-format", "mp4",
+        "--max-filesize", "200M",
+        "-o", outtmpl,
+        url,
+    ]
+
+    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if res.returncode != 0:
+        raise RuntimeError(f"yt-dlp failed: {res.stderr[-800:]}")
+
+    # Find the downloaded mp4
+    candidates = sorted(Path(temp_dir).glob("video.*"))
+    if not candidates:
+        raise RuntimeError("yt-dlp produced no output file")
+
+    # If multiple, prefer mp4
+    for p in candidates:
+        if p.suffix.lower() == ".mp4":
+            return p
+    return candidates[0]
+
+
 @cookApp.post("/video-import", response_model=RecipeDraft)
 async def video_import(video: UploadFile = File(...)):
     """
@@ -645,3 +708,4 @@ async def video_import(video: UploadFile = File(...)):
         # Return response
         from fastapi.responses import JSONResponse
         return JSONResponse(content=data)
+
