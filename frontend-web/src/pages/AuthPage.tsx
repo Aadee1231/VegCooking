@@ -39,10 +39,30 @@ export default function AuthPage() {
     }
 
     // SIGN IN (THIS WAS MISSING!!!)
+    let emailToUse = identifier;
+
+    // If they typed a username, look up the email
+    if (!identifier.includes("@")) {
+        const { data, error } = await supabase
+            .from("profiles")
+            .select("email")
+            .eq("username", identifier)
+            .single();
+
+        if (error || !data) {
+            setLoading(false);
+            window.vcToast("Username not found");
+            return;
+        }
+
+        emailToUse = data.email;
+    }
+
     const { error } = await supabase.auth.signInWithPassword({
-        email: identifier,
+        email: emailToUse,
         password,
     });
+
 
     setLoading(false);
 
