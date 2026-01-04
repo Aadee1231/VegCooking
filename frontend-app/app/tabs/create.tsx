@@ -156,10 +156,6 @@ function niceFileName(uri?: string, fallback = "file") {
   return last || fallback;
 }
 
-async function uriToBlob(uri: string): Promise<Blob> {
-  const res = await fetch(uri);
-  return await res.blob();
-}
 
 async function pickMedia(type: "image" | "video") {
   const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();

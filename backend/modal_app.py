@@ -4,8 +4,14 @@ app = modal.App("vegcooking-backend")
 
 image = (
     modal.Image.debian_slim()
-    .apt_install("ffmpeg")
+    .apt_install("ffmpeg", "curl", "unzip", "bash")
     .pip_install_from_requirements("requirements.txt")
+    .run_commands([
+        "curl -fsSL https://deno.land/install.sh | sh",
+        "/root/.deno/bin/deno --version",
+        "echo 'export PATH=/root/.deno/bin:$PATH' >> /root/.bashrc",
+        "bash -c 'source /root/.bashrc && deno --version'",
+    ])
     .add_local_dir("./app", "/root/app")
 )
 

@@ -648,34 +648,45 @@ def download_video_from_url(url: str, temp_dir: str) -> Path:
     Downloads a low-res MP4 into temp_dir and returns the path.
     Uses yt-dlp and keeps file only inside temp_dir (auto-deleted by TemporaryDirectory).
     """
-    outtmpl = str(Path(temp_dir) / "video.%(ext)s")
+    
+    outtmpl = Path(temp_dir) / "video.mp4"
 
-    # Prefer <=360p mp4 for speed (good enough for frames + transcript)
-    cmd = [
-        "yt-dlp",
-        "--no-playlist",
-        "-f", "bv*[ext=mp4][height<=360]+ba[ext=m4a]/b[ext=mp4][height<=360]/b",
-        "--merge-output-format", "mp4",
-        "--max-filesize", "200M",
-        "-o", outtmpl,
-        url,
-    ]
+    import yt_dlp
 
-    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    # Configure options
+    ydl_opts = {
+        'js_runtimes': {
+            'deno': {
+                'path': '/root/.deno/bin/deno'
+            }
+        },
+        'format': 'bv*[ext=mp4][height<=360]+ba[ext=m4a]/b[ext=mp4][height<=360]/b',
+        'merge_output_format': 'mp4',
+        'max_filesize': 200 * 1024 * 1024,  # 200MB in bytes
+        'outtmpl': str(outtmpl),
+        'noplaylist': True,
+    }
+
+    # Download
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
+
+    return outtmpl
+
+@cookApp.post("/download-video-test")
+def download_video_test(request: dict):
+    url = request.get("url")
+    if not url:
+        raise HTTPException(status_code=400, detail="URL is required")
+    # Run deno --version 
+    res = subprocess.run("bash -c 'source /root/.bashrc && deno --version'", shell=True, text=True)
+    print("attempt 2:", res.stdout)
     if res.returncode != 0:
-        raise RuntimeError(f"yt-dlp failed: {res.stderr[-800:]}")
-
-    # Find the downloaded mp4
-    candidates = sorted(Path(temp_dir).glob("video.*"))
-    if not candidates:
-        raise RuntimeError("yt-dlp produced no output file")
-
-    # If multiple, prefer mp4
-    for p in candidates:
-        if p.suffix.lower() == ".mp4":
-            return p
-    return candidates[0]
-
+        print("Error:", res.stderr)
+    with tempfile.TemporaryDirectory() as td:
+        path = download_video_from_url(url, td)
+        print("Downloaded video to:", path)
+        return {"path": str(path)}
 
 @cookApp.post("/video-import", response_model=RecipeDraft)
 async def video_import(video: UploadFile = File(...)):

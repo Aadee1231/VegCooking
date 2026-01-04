@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://vegcooking-backend--fastapi-app.modal.run/$1"
+      "destination": "https://flavur--vegcooking-backend-fastapi-app.modal.run/$1"
     },
     {
       "source": "/(.*)",
