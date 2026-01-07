@@ -1,7 +1,7 @@
+import React, { useEffect, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -269,8 +269,26 @@ export default function MyAccountScreen() {
             marginTop: theme.spacing(2),
             padding: theme.spacing(2),
             backgroundColor: "#e8f5e9",
+            position: "relative",
           }}
         >
+          <Pressable
+            onPress={() => router.push("/guide")}
+            style={{
+              position: "absolute",
+              right: theme.spacing(1),
+              top: theme.spacing(1),
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: "rgba(46,125,50,0.2)",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 1,
+            }}
+          >
+            <Ionicons name="help-outline" size={20} color={theme.colors.green ?? "#2e7d32"} />
+          </Pressable>
           <View style={{ alignItems: "center" }}>
             <View style={{ position: "relative" }}>
               <Pressable onPress={uploadAvatar} style={{ borderRadius: 72 }}>

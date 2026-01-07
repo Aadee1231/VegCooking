@@ -66,6 +66,9 @@ export default function MealPlanScreen() {
   // NEW: cache recipe metadata by id (so we can display title/image/cook time)
   const [recipeMap, setRecipeMap] = useState<Record<number, RecipeMini>>({});
 
+  // Auto-planning state
+  const [isAutoPlanning, setIsAutoPlanning] = useState(false);
+
   const router = useRouter();
 
 
@@ -264,6 +267,76 @@ export default function MealPlanScreen() {
     setPickerOpen(false);
   }
 
+  // Auto-Magic Planner function
+  async function handleAutoPlanWeek() {
+    setIsAutoPlanning(true);
+    try {
+      await requireUser();
+      
+      // Get user data and preferences
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
+      
+      if (!userId) {
+        toast("Please sign in to use Auto-Magic Planner");
+        return;
+      }
+ 
+      // Call smart planning API
+      const apiUrl = "https://flavur--vegcooking-backend-fastapi-app.modal.run";
+      console.log('🔗 Calling API:', `${apiUrl}/smart-meal-plan`);
+      console.log('📤 Request data:', {
+        user_id: userId,
+        week_start: fmtISODate(days[0]),
+        existing_plans: plans,
+      });
+      
+      const response = await fetch(
+        "https://flavur--vegcooking-backend-fastapi-app.modal.run/smart-meal-plan",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            user_id: userId,
+            week_start: fmtISODate(days[0]),
+            existing_plans: plans,
+          }),
+        }
+      );
+
+
+      console.log('📥 Response status:', response.status);
+      console.log('📥 Response ok:', response.ok);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Error response:', errorText);
+        throw new Error(`Planning service unavailable (${response.status}): ${errorText}`);
+      }
+
+      const mealPlan = await response.json();
+      
+      // Apply the suggested meal plan
+      for (const plan of mealPlan.suggestions) {
+        const planDate = new Date(plan.date);
+        await upsertCell(planDate, plan.meal, {
+          location: "home",
+          recipe_id: plan.recipe_id,
+          external_name: null,
+        });
+      }
+
+      toast(`Auto-planned ${mealPlan.suggestions.length} meals for your week! 🎉`);
+    } catch (error: any) {
+      console.error('Auto-plan error:', error);
+      toast(error.message || 'Auto-planning failed. Please try again.');
+    } finally {
+      setIsAutoPlanning(false);
+    }
+  }
+
   const day = days[selectedDayIdx];
 
   if (loading) {
@@ -306,7 +379,14 @@ export default function MealPlanScreen() {
               <Chip label="Next" onPress={nextWeek} />
             </View>
 
-            <View style={{ marginTop: 12, width: "100%", paddingHorizontal: theme.spacing(2) }}>
+            <View style={{ marginTop: 12, width: "100%", paddingHorizontal: theme.spacing(2), gap: 10 }}>
+              <Button
+                label={isAutoPlanning ? "Planning Your Week..." : "Plan My Week"}
+                onPress={handleAutoPlanWeek}
+                disabled={isAutoPlanning}
+                variant="ghost"
+                loading={isAutoPlanning}
+              />
               <Button
                 label="Grocery List"
                 onPress={() => {

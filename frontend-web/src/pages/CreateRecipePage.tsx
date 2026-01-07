@@ -29,7 +29,7 @@ type Step = { position: number; body: string };
 type Line = {
   position: number;
   ingredient?: IngredientRow | null;
-  quantity?: number | null;
+  quantity?: string | null;
   unit_code?: string | null;
   notes?: string | null;
 };
@@ -56,6 +56,93 @@ const TAG_OPTIONS = [
   "Spicy",
 ];
 
+/* ---------- Utility Functions ---------- */
+function parseQuantityToNumber(qtyRaw: string): number | null {
+  const qty = qtyRaw.trim();
+  if (!qty) return null;
+
+  // Decimal: "0.5", "2", "2.25"
+  if (/^\d+(\.\d+)?$/.test(qty)) {
+    const n = Number(qty);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return n;
+  }
+
+  // Fraction: "1/2"
+  if (/^\d+\/\d+$/.test(qty)) {
+    const [a, b] = qty.split("/").map(Number);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || b === 0) return null;
+    const n = a / b;
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return n;
+  }
+
+  // Mixed fraction: "1 1/2"
+  if (/^\d+\s+\d+\/\d+$/.test(qty)) {
+    const [wholeStr, fracStr] = qty.split(" ");
+    const whole = Number(wholeStr);
+    const [a, b] = fracStr.split("/").map(Number);
+    if (!Number.isFinite(whole) || !Number.isFinite(a) || !Number.isFinite(b) || b === 0) return null;
+    const n = whole + a / b;
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return n;
+  }
+
+  // Anything else = invalid
+  return null;
+}
+
+function sanitizeQuantityInput(raw: string) {
+  let s = raw.replace(/[^\d\/.\s]/g, "");
+  s = s.replace(/-/g, "");
+  s = s.replace(/\s+/g, " ");
+  s = s.replace(/^\s+/, "");
+
+  const firstSlash = s.indexOf("/");
+  if (firstSlash !== -1) {
+    s =
+      s.slice(0, firstSlash + 1) +
+      s.slice(firstSlash + 1).replace(/\//g, "");
+  }
+
+  const hasSlash = s.includes("/");
+  if (hasSlash) {
+    s = s.replace(/\./g, "");
+  } else {
+    const firstDot = s.indexOf(".");
+    if (firstDot !== -1) {
+      s =
+        s.slice(0, firstDot + 1) +
+        s.slice(firstDot + 1).replace(/\./g, "");
+    }
+  }
+
+  const firstSpace = s.indexOf(" ");
+  if (firstSpace !== -1) {
+    s =
+      s.slice(0, firstSpace + 1) +
+      s.slice(firstSpace + 1).replace(/ /g, "");
+  }
+
+  return s;
+}
+
+function isValidQuantityWhileTyping(qty: string) {
+  if (qty === "") return true;
+
+  if (/^\d+(\.)?$/.test(qty)) return true;
+  if (/^\d+(\.\d+)?$/.test(qty)) return true;
+
+  if (/^\d+\/?$/.test(qty)) return true;
+  if (/^\d+\/\d+$/.test(qty)) return true;
+
+  if (/^\d+\s?$/.test(qty)) return true;
+  if (/^\d+\s+\d+\/?$/.test(qty)) return true;
+  if (/^\d+\s+\d+\/\d+$/.test(qty)) return true;
+
+  return false;
+}
+
 /* ---------- Ingredient Combo ---------- */
 function IngredientCombo({
   value,
@@ -73,9 +160,6 @@ function IngredientCombo({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [confirmName, setConfirmName] = useState<string | null>(null);
-
-
-
 
   useEffect(() => setQ(value?.name ?? ""), [value?.id, value?.name]);
 
@@ -301,9 +385,16 @@ export default function CreateRecipePage() {
   try {
     const base = import.meta.env.VITE_API_BASE_URL;
 
+    // Get auth token
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
+
     const res = await fetch(`${base}/video-import-url`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ url }),
       signal: controller.signal,
     });
@@ -315,38 +406,61 @@ export default function CreateRecipePage() {
       throw new Error(text || "Link import failed");
     }
 
-    const draft = await res.json();
+    const { job_id } = await res.json();
+    
+    // Poll for job completion
+    let jobStatus;
+    let attempts = 0;
+    const maxAttempts = 60; // 5 minutes max
+    
+    do {
+      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+      attempts++;
+      
+      const statusRes = await fetch(`${base}/import/jobs/${job_id}`, {
+        headers,
+      });
+      
+      if (statusRes.ok) {
+        jobStatus = await statusRes.json();
+      }
+    } while (jobStatus?.status === 'processing' && attempts < maxAttempts);
+    
+    if (jobStatus?.status === 'completed' && jobStatus.result_json) {
+      const draft = jobStatus.result_json;
 
-    // same population logic you already do
-    setTitle(draft.title ?? "");
-    setCaption(draft.caption ?? "");
-    setDescription(draft.description ?? "");
-    setServings(draft.servings ?? "");
-    setPrepTime(draft.prep_time ?? "");
-    setCookTime(draft.cook_time ?? "");
-    setDifficulty(draft.difficulty ?? "");
-    setTags(draft.tags ?? []);
+      // same population logic you already do
+      setTitle(draft.title ?? "");
+      setCaption(draft.caption ?? "");
+      setDescription(draft.description ?? "");
+      setServings(draft.servings ?? "");
+      setTags(draft.tags ?? []);
 
-    setSteps(
-      (draft.steps ?? []).map((s: any, i: number) => ({
-        position: i + 1,
-        body: s.body ?? "",
-      }))
-    );
+      setLines(
+        (draft.ingredients ?? []).map((ing: any, i: number) => ({
+          position: i + 1,
+          ingredient: ing.ingredient_id
+            ? { id: ing.ingredient_id, name: ing.name, created_by: null }
+            : null,
+          quantity: ing.quantity ?? null,
+          unit_code: ing.unit ?? null,
+          notes: ing.notes ?? null,
+        }))
+      );
 
-    setLines(
-      (draft.ingredients ?? []).map((ing: any, i: number) => ({
-        position: i + 1,
-        ingredient: ing.ingredient_id
-          ? { id: ing.ingredient_id, name: ing.name, created_by: null }
-          : null,
-        quantity: ing.quantity ?? null,
-        unit_code: ing.unit ?? null,
-        notes: ing.notes ?? null,
-      }))
-    );
+      setSteps(
+        (draft.steps ?? []).map((s: any, i: number) => ({
+          position: i + 1,
+          body: s.body ?? "",
+        }))
+      );
 
-    window.vcToast("Imported from link! Review before saving.");
+      window.vcToast("Imported from link! Review before saving.");
+    } else if (jobStatus?.status === 'failed') {
+      throw new Error(jobStatus.error_message || "Processing failed");
+    } else {
+      throw new Error("Import timed out. Please try again.");
+    }
   } catch (err: any) {
     if (err.name === "AbortError") window.vcToast("Import timed out. Try again.");
     else window.vcToast(err.message || "Import failed");
@@ -356,81 +470,85 @@ export default function CreateRecipePage() {
   }
 }
 
-    async function importFromVideo() {
-        if (!importVideo) {
-            window.vcToast("Upload a video first.");
-            return;
-        }
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
+  }, []);
 
-        setImporting(true);
-
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => {
-            controller.abort();
-        }, 180_000); // 3 minutes
-
-        try {
-            const fd = new FormData();
-            fd.append("video", importVideo);
-
-            const base = import.meta.env.VITE_API_BASE_URL;
-
-            const res = await fetch(`${base}/video-import`, {
-            method: "POST",
-            body: fd,
-            signal: controller.signal,
-            });
-
-            clearTimeout(timeoutId);
-
-            if (!res.ok) {
-            const text = await res.text();
-            throw new Error(text || "Video import failed");
-            }
-
-            const draft = await res.json();
-
-            // ⬇️ Populate state
-            setTitle(draft.title ?? "");
-            setCaption(draft.caption ?? "");
-            setDescription(draft.description ?? "");
-            setServings(draft.servings ?? "");
-            setPrepTime(draft.prep_time ?? "");
-            setCookTime(draft.cook_time ?? "");
-            setDifficulty(draft.difficulty ?? "");
-            setTags(draft.tags ?? []);
-
-            setSteps(
-            draft.steps.map((s: any, i: number) => ({
-                position: i + 1,
-                body: s.body ?? "",
-            }))
-            );
-
-            setLines(
-            draft.ingredients.map((ing: any, i: number) => ({
-                position: i + 1,
-                ingredient: ing.ingredient_id
-                ? { id: ing.ingredient_id, name: ing.name, created_by: null }
-                : null,
-                quantity: ing.quantity ?? null,
-                unit_code: ing.unit ?? null,
-                notes: ing.notes ?? null,
-            }))
-            );
-
-            window.vcToast("Imported! Review before saving.");
-        } catch (err: any) {
-            if (err.name === "AbortError") {
-            window.vcToast("Import timed out. Try again.");
-            } else {
-            window.vcToast(err.message || "Import failed");
-            }
-        } finally {
-            clearTimeout(timeoutId);
-            setImporting(false);
-        }
+  async function importFromVideo() {
+    if (!importVideo) {
+      window.vcToast("Upload a video first.");
+      return;
     }
+
+    setImporting(true);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 180_000); // 3 minutes
+
+    try {
+      const fd = new FormData();
+      fd.append("video", importVideo);
+
+      const base = import.meta.env.VITE_API_BASE_URL;
+
+      const res = await fetch(`${base}/video-import`, {
+        method: "POST",
+        body: fd,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Video import failed");
+      }
+
+      const draft = await res.json();
+
+      // ⬇️ Populate state
+      setTitle(draft.title ?? "");
+      setCaption(draft.caption ?? "");
+      setDescription(draft.description ?? "");
+      setServings(draft.servings ?? "");
+      setPrepTime(draft.prep_time ?? "");
+      setCookTime(draft.cook_time ?? "");
+      setDifficulty(draft.difficulty ?? "");
+      setTags(draft.tags ?? []);
+
+      setSteps(
+        draft.steps.map((s: any, i: number) => ({
+          position: i + 1,
+          body: s.body ?? "",
+        }))
+      );
+
+      setLines(
+        draft.ingredients.map((ing: any, i: number) => ({
+          position: i + 1,
+          ingredient: ing.ingredient_id
+            ? { id: ing.ingredient_id, name: ing.name, created_by: null }
+            : null,
+          quantity: ing.quantity ?? null,
+          unit_code: ing.unit ?? null,
+          notes: ing.notes ?? null,
+        }))
+      );
+
+      window.vcToast("Imported! Review before saving.");
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        window.vcToast("Import timed out. Try again.");
+      } else {
+        window.vcToast(err.message || "Import failed");
+      }
+    } finally {
+      clearTimeout(timeoutId);
+      setImporting(false);
+    }
+  }
 
 
 
@@ -581,7 +699,7 @@ export default function CreateRecipePage() {
         .map((l) => ({
           recipe_id: recipeId,
           ingredient_id: l.ingredient!.id,
-          quantity: l.quantity ?? null,
+          quantity: l.quantity ? parseQuantityToNumber(l.quantity) : null,
           unit_code: l.unit_code ?? null,
           notes: l.notes ?? null,
           position: l.position,
@@ -819,26 +937,24 @@ export default function CreateRecipePage() {
             />
 
             <input
-                type="number"
-                min={0}
-                placeholder="Qty"
-                value={l.quantity ?? ""}
-                onChange={(e) => {
-                    const val = e.target.value;
-                    setLines((p) =>
-                    p.map((x) =>
-                        x.position === l.position
-                        ? {
-                            ...x,
-                            quantity:
-                                val === "" ? null : Math.max(0, Number(val)),
-                            }
-                        : x
-                    )
-                    );
-                }}
-                style={{ ...inputStyle, width: 80 }}
+            type="text"
+            placeholder="ex: 1/2 or 0.5"
+            value={l.quantity ?? ""}
+            onChange={(e) => {
+                const cleaned = sanitizeQuantityInput(e.target.value);
+                if (!isValidQuantityWhileTyping(cleaned)) return;
+
+                setLines((p) =>
+                p.map((x) =>
+                    x.position === l.position
+                    ? { ...x, quantity: cleaned }
+                    : x
+                )
+                );
+            }}
+            style={{ ...inputStyle, width: 110 }}
             />
+
 
 
             <select

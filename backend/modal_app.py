@@ -4,8 +4,9 @@ app = modal.App("vegcooking-backend")
 
 image = (
     modal.Image.debian_slim()
-    .apt_install("ffmpeg", "curl", "unzip", "bash")
+    .apt_install("ffmpeg", "curl", "unzip", "bash", "python3-dev")
     .pip_install_from_requirements("requirements.txt")
+    .pip_install("requests", "beautifulsoup4", "PyJWT", "aiofiles")
     .run_commands([
         "curl -fsSL https://deno.land/install.sh | sh",
         "/root/.deno/bin/deno --version",

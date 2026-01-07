@@ -227,7 +227,23 @@ function FeedHeader({
         }}
       >
         {/* Title */}
-        <View style={{ alignItems: "center" }}>
+        <View style={{ alignItems: "center", position: "relative" }}>
+          <Pressable
+            onPress={() => router.push("/guide")}
+            style={{
+              position: "absolute",
+              right: 0,
+              top: 0,
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: "rgba(255,255,255,0.2)",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Ionicons name="help-outline" size={20} color="white" />
+          </Pressable>
           <Text
             style={{
               color: "white", 

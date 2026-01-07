@@ -1,5 +1,7 @@
 import os
 import re
+import json
+import decimal
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -17,6 +19,17 @@ from pathlib import Path
 
 from fastapi import UploadFile, File
 from openai import OpenAI
+
+# Custom JSON encoder to handle Decimal types
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, decimal.Decimal):
+            return float(obj)
+        return super().default(obj)
+
+def json_serialize(obj):
+    """Helper function to serialize objects with Decimal types"""
+    return json.loads(json.dumps(obj, cls=CustomJSONEncoder))
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE = os.environ.get("SUPABASE_SERVICE_ROLE")
@@ -688,6 +701,319 @@ def download_video_test(request: dict):
         print("Downloaded video to:", path)
         return {"path": str(path)}
 
+class SmartMealPlanRequest(BaseModel):
+    user_id: str
+    week_start: str
+    existing_plans: List[dict] = []
+
+class MealSuggestion(BaseModel):
+    date: str
+    meal: str
+    recipe_id: int
+    reason: str
+
+class SmartMealPlanResponse(BaseModel):
+    suggestions: List[MealSuggestion]
+    shared_ingredients: List[str]
+    efficiency_score: float
+
+@cookApp.post("/smart-meal-plan", response_model=SmartMealPlanResponse)
+async def smart_meal_plan(request: SmartMealPlanRequest):
+    """
+    AI-powered meal planning that considers:
+    - User's past recipe likes and saved recipes
+    - Dietary goals and preferences
+    - Ingredient overlap to reduce waste
+    - Meal type differentiation (breakfast, lunch, dinner)
+    """
+    try:
+        print(f"Starting smart meal plan for user: {request.user_id}")
+        
+        # Fetch user's recipe interaction history
+        user_history = await _get_user_recipe_history(request.user_id)
+        
+        # Get user's available recipe IDs
+        user_recipe_ids = user_history.get("available_recipe_ids", [])
+        print(f"User has access to {len(user_recipe_ids)} recipes")
+        
+        if not user_recipe_ids:
+            print("No recipes available for this user")
+            return SmartMealPlanResponse(
+                suggestions=[],
+                shared_ingredients=[],
+                efficiency_score=0.0
+            )
+        
+        # Fetch available recipes with ingredients for this user only
+        available_recipes = await _get_recipes_with_ingredients(user_recipe_ids)
+        
+        # Get existing plans for the week to avoid duplicates
+        existing_meal_slots = {
+            f"{plan.get('plan_date')}-{plan.get('meal')}" 
+            for plan in request.existing_plans
+        }
+        print(f"Existing meal slots to avoid: {len(existing_meal_slots)}")
+        
+        # Generate smart meal plan using AI
+        meal_plan = await _generate_smart_meal_plan(
+            user_history=user_history,
+            available_recipes=available_recipes,
+            week_start=request.week_start,
+            existing_slots=existing_meal_slots
+        )
+        
+        print(f"Generated {len(meal_plan.suggestions)} meal suggestions")
+        return meal_plan
+        
+    except Exception as e:
+        print(f"Error in smart_meal_plan: {e}")
+        raise HTTPException(status_code=500, detail=f"Meal planning failed: {str(e)}")
+
+async def _get_user_recipe_history(user_id: str) -> dict:
+    """Get user's recipe interactions, likes, and preferences"""
+    try:
+        print(f"Fetching recipes for user_id: {user_id}")
+        
+        # Get user's created recipes
+        created_res = (
+            supabase
+            .table("recipes")
+            .select("id,title,tags,created_at")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        print(f"Created recipes: {len(created_res.data or [])}")
+        
+        # Get user's saved/added recipes from public recipes
+        added_res = (
+            supabase
+            .table("user_added_recipes")
+            .select("recipe_id,created_at")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        print(f"User added recipes: {len(added_res.data or [])}")
+        
+        # Get user's meal plan history to analyze preferences
+        plans_res = (supabase.table("meal_plans")
+            .select("recipe_id,plan_date,meal,created_at")
+            .eq("user_id", user_id)
+            .not_("recipe_id", "is", None)
+            .order("created_at", desc=True)
+            .limit(100)
+            .execute())
+        print(f"Meal plans: {len(plans_res.data or [])}")
+        
+        # Get recipe details for added recipes
+        added_recipe_ids = [item["recipe_id"] for item in (added_res.data or [])]
+        added_recipes_details = []
+        if added_recipe_ids:
+            details_res = (supabase.table("public_recipes_with_stats")
+                .select("id,title,tags,difficulty,prep_time,cook_time")
+                .in_("id", added_recipe_ids)
+                .execute())
+            added_recipes_details = details_res.data or []
+        
+        # Combine all available recipes for this user
+        all_user_recipes = (created_res.data or []) + added_recipes_details
+        
+        # Analyze patterns from history
+        recipe_frequency = {}
+        meal_preferences = {"breakfast": {}, "lunch": {}, "dinner": {}}
+        
+        for plan in (plans_res.data or []):
+            recipe_id = plan.get("recipe_id")
+            meal_type = plan.get("meal")
+            
+            if recipe_id:
+                recipe_frequency[recipe_id] = recipe_frequency.get(recipe_id, 0) + 1
+                meal_preferences[meal_type][recipe_id] = meal_preferences[meal_type].get(recipe_id, 0) + 1
+        
+        result = {
+            "created_recipes": json_serialize(created_res.data or []),
+            "added_recipes": json_serialize(added_recipes_details),
+            "recipe_frequency": json_serialize(recipe_frequency),
+            "meal_preferences": json_serialize(meal_preferences),
+            "total_planned": len(plans_res.data or []),
+            "available_recipe_ids": json_serialize([r["id"] for r in all_user_recipes])
+        }
+        
+        print(f"User history result: {result}")
+        return result
+        
+    except Exception as e:
+        print(f"Error fetching user history: {e}")
+        return {
+            "created_recipes": [], 
+            "added_recipes": [],
+            "recipe_frequency": {}, 
+            "meal_preferences": {}, 
+            "total_planned": 0,
+            "available_recipe_ids": []
+        }
+
+async def _get_recipes_with_ingredients(user_recipe_ids: List[int] = None) -> List[dict]:
+    """Get user's recipes with their ingredients for analysis"""
+    try:
+        # Only get recipes that belong to this user
+        if not user_recipe_ids:
+            print("No user recipe IDs provided")
+            return []
+            
+        print(f"Fetching ingredients for recipe IDs: {user_recipe_ids}")
+        
+        # Get recipes with ingredients for user's recipes only
+        recipes_res = (supabase.table("public_recipes_with_stats")
+            .select("id,title,tags,difficulty,prep_time,cook_time")
+            .in_("id", user_recipe_ids)
+            .execute())
+        
+        print(f"Found {len(recipes_res.data or [])} recipes")
+        
+        # Get ingredients for each recipe
+        recipes_with_ingredients = []
+        for recipe in (recipes_res.data or []):
+            ingredients_res = (supabase.table("recipe_ingredients")
+                .select("ingredient_id,quantity,unit")
+                .eq("recipe_id", recipe["id"])
+                .execute())
+            
+            # Get ingredient details
+            ingredient_ids = [ing["ingredient_id"] for ing in (ingredients_res.data or [])]
+            ingredients_details = {}
+            if ingredient_ids:
+                details_res = (supabase.table("ingredients")
+                    .select("id,name,norm_name")
+                    .in_("id", ingredient_ids)
+                    .execute())
+                ingredients_details = {
+                    ing["id"]: ing["name"] 
+                    for ing in (details_res.data or [])
+                }
+            
+            recipe_data = {
+                **recipe,
+                "ingredients": [
+                    {
+                        "name": ingredients_details.get(ing["ingredient_id"], "Unknown"),
+                        "ingredient_id": ing["ingredient_id"],
+                        "quantity": float(ing["quantity"]) if ing.get("quantity") else None,
+                        "unit": ing["unit"]
+                    }
+                    for ing in (ingredients_res.data or [])
+                ]
+            }
+            recipes_with_ingredients.append(json_serialize(recipe_data))
+        
+        print(f"Returning {len(recipes_with_ingredients)} recipes with ingredients")
+        return recipes_with_ingredients
+        
+    except Exception as e:
+        print(f"Error fetching recipes with ingredients: {e}")
+        return []
+
+async def _generate_smart_meal_plan(user_history: dict, available_recipes: List[dict], week_start: str, existing_slots: set) -> SmartMealPlanResponse:
+    """Use AI to generate an optimal meal plan"""
+    
+    # Prepare context for AI
+    context_prompt = f"""
+    You are an expert meal planning AI. Create a 7-day meal plan that maximizes efficiency and user satisfaction.
+
+    USER PROFILE:
+    - Has planned {user_history.get('total_planned', 0)} meals in the past
+    - Frequently uses recipes: {list(user_history.get('recipe_frequency', {}).keys())[:5]}
+    - Meal preferences: {user_history.get('meal_preferences', {})}
+
+    AVAILABLE RECIPES:
+    {len(available_recipes)} recipes available with full ingredient data
+
+    REQUIREMENTS:
+    1. Create meal suggestions for 7 days starting {week_start}
+    2. Only suggest breakfast, lunch, and dinner (no snacks)
+    3. Maximize ingredient overlap to reduce waste
+    4. Prioritize recipes the user has used before
+    5. Ensure variety (don't repeat same recipe within 3 days)
+    6. Consider meal appropriatene (breakfast foods for breakfast, etc.)
+    7. Balance difficulty levels throughout the week
+
+    EXISTING SLOTS TO AVOID:
+    {list(existing_slots)[:10]}...
+
+    Return JSON with:
+    - suggestions: array of {{date, meal, recipe_id, reason}}
+    - shared_ingredients: array of ingredients used across multiple meals
+    - efficiency_score: float 0-1 indicating ingredient overlap efficiency
+    """
+    
+    try:
+        # Use OpenAI to generate the meal plan
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a meal planning expert. Return only valid JSON."},
+                {"role": "user", "content": context_prompt}
+            ],
+            response_format={"type": "json_object"}
+        )
+        
+        result = json.loads(response.choices[0].message.content)
+        
+        # Validate and structure the response
+        suggestions = []
+        for suggestion in result.get("suggestions", []):
+            # Verify the recipe exists
+            recipe_exists = any(r["id"] == suggestion["recipe_id"] for r in available_recipes)
+            if recipe_exists:
+                suggestions.append(MealSuggestion(**suggestion))
+        
+        return SmartMealPlanResponse(
+            suggestions=suggestions,
+            shared_ingredients=result.get("shared_ingredients", []),
+            efficiency_score=result.get("efficiency_score", 0.5)
+        )
+        
+    except Exception as e:
+        print(f"AI meal planning error: {e}")
+        # Fallback to simple meal plan
+        return _generate_fallback_meal_plan(available_recipes, week_start, existing_slots)
+
+def _generate_fallback_meal_plan(available_recipes: List[dict], week_start: str, existing_slots: set) -> SmartMealPlanResponse:
+    """Generate a simple meal plan as fallback"""
+    import random
+    from datetime import datetime, timedelta
+    
+    suggestions = []
+    meals = ["breakfast", "lunch", "dinner"]
+    
+    # Filter for suitable recipes
+    suitable_recipes = [r for r in available_recipes if r.get("difficulty") in ["Easy", "Medium"]]
+    
+    if not suitable_recipes:
+        suitable_recipes = available_recipes[:10]  # Use any recipes if none are suitable
+    
+    start_date = datetime.strptime(week_start, "%Y-%m-%d")
+    
+    for day_offset in range(7):
+        current_date = start_date + timedelta(days=day_offset)
+        date_str = current_date.strftime("%Y-%m-%d")
+        
+        for meal in meals:
+            slot_key = f"{date_str}-{meal}"
+            if slot_key not in existing_slots:
+                recipe = random.choice(suitable_recipes)
+                suggestions.append(MealSuggestion(
+                    date=date_str,
+                    meal=meal,
+                    recipe_id=recipe["id"],
+                    reason=f"Simple {meal} option"
+                ))
+    
+    return SmartMealPlanResponse(
+        suggestions=suggestions,
+        shared_ingredients=[],
+        efficiency_score=0.3
+    )
+
 @cookApp.post("/video-import", response_model=RecipeDraft)
 async def video_import(video: UploadFile = File(...)):
     """
@@ -719,4 +1045,3 @@ async def video_import(video: UploadFile = File(...)):
         # Return response
         from fastapi.responses import JSONResponse
         return JSONResponse(content=data)
-
