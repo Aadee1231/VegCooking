@@ -442,7 +442,7 @@ export default function CreateRecipePage() {
           ingredient: ing.ingredient_id
             ? { id: ing.ingredient_id, name: ing.name, created_by: null }
             : null,
-          quantity: ing.quantity ?? null,
+          quantity: ing.quantity != null ? String(ing.quantity) : null,
           unit_code: ing.unit ?? null,
           notes: ing.notes ?? null,
         }))
@@ -531,7 +531,7 @@ export default function CreateRecipePage() {
           ingredient: ing.ingredient_id
             ? { id: ing.ingredient_id, name: ing.name, created_by: null }
             : null,
-          quantity: ing.quantity ?? null,
+          quantity: ing.quantity != null ? String(ing.quantity) : null,
           unit_code: ing.unit ?? null,
           notes: ing.notes ?? null,
         }))
@@ -598,7 +598,7 @@ export default function CreateRecipePage() {
           ing.map((r: any) => ({
             position: r.position,
             ingredient: r.ingredients,
-            quantity: r.quantity,
+            quantity: r.quantity != null ? String(r.quantity) : null, // ✅ FIX
             unit_code: r.unit_code,
             notes: r.notes,
           }))
