@@ -33,6 +33,10 @@ import { resolveImageUrl } from "../../src/lib/images";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams } from "expo-router";
 import { likesStore } from "../../src/lib/likesStore";
+import { SupportButton } from "../../components/support-button";
+import { DonationModal } from "../../components/donation-modal";
+import { inAppPurchaseService } from "../../src/services/in-app-purchases";
+import * as Haptics from 'expo-haptics';
 
 
 
@@ -209,12 +213,14 @@ function FeedHeader({
   activeTags,
   setTagAndReload,
   isFetching,
+  onSupportPress,
 }: {
   search: string;
   setSearch: (v: string) => void;
   activeTags: string[];
   setTagAndReload: (tag: string) => void;
   isFetching: boolean;
+  onSupportPress: () => void;
 }) {
   return (
     <View style={{ backgroundColor: BG }}>
@@ -244,6 +250,13 @@ function FeedHeader({
           >
             <Ionicons name="help-outline" size={20} color="white" />
           </Pressable>
+          <View style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+          }}>
+            <SupportButton onPress={onSupportPress} />
+          </View>
           <Text
             style={{
               color: "white", 
@@ -362,6 +375,10 @@ export default function FeedScreen() {
 
   const [initialLoading, setInitialLoading] = useState(true);
 
+  // Support button state
+  const [donationModalVisible, setDonationModalVisible] = useState(false);
+  const [purchaseLoading, setPurchaseLoading] = useState(false);
+
   const scrollRef = useRef<FlatList>(null);
   const params = useLocalSearchParams<{ ts?: string }>();
 
@@ -412,20 +429,31 @@ export default function FeedScreen() {
 
 
   useEffect(() => {
+    let mounted = true;
+    
     (async () => {
       const { data } = await supabase.auth.getUser();
       const uid = data.user?.id ?? null;
+      
+      if (!mounted) return;
       setUserId(uid);
 
       if (uid) {
         await Promise.all([loadLikes(uid), loadSaved(uid), loadMeProfile(uid)]);
       }
 
-      // First feed load
-      await loadFeed({ reset: true, reason: "initial" });
+      if (!mounted) return;
+      
+      // First feed load - pass uid directly to avoid stale closure
+      await loadFeed({ reset: true, reason: "initial", overrideUserId: uid });
 
+      if (!mounted) return;
       setInitialLoading(false);
     })();
+
+    return () => {
+      mounted = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -511,8 +539,8 @@ export default function FeedScreen() {
     setProfiles(map);
   }
 
-  async function loadFeed(opts: { reset: boolean; reason: "initial" | "search" | "tags" | "mode" | "refresh" | "paginate" }) {
-    const { reset, reason } = opts;
+  async function loadFeed(opts: { reset: boolean; reason: "initial" | "search" | "tags" | "mode" | "refresh" | "paginate"; overrideUserId?: string | null }) {
+    const { reset, reason, overrideUserId } = opts;
 
     // Prevent overlap
     if (!reset) {
@@ -526,34 +554,63 @@ export default function FeedScreen() {
     }
 
     try {
-      // Stable ordering: created_at desc, id desc
-      let q = supabase
-        .from("public_recipes_with_stats")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .order("id", { ascending: false })
-        .limit(PAGE_SIZE);
+      // Use overrideUserId if provided (for initial load), otherwise use state userId
+      const currentUserId = overrideUserId !== undefined ? overrideUserId : userId;
+      
+      // Use personalized feed when: 
+      // 1. User is logged in
+      // 2. No active tag filters (viewing "All")
+      // 3. No search query
+      const usePersonalizedFeed = currentUserId && effectiveTags.length === 0 && !debouncedSearch.length;
 
-      // Tags filter
-      if (effectiveTags.length) {
-        q = q.overlaps("tags", effectiveTags);
+      let data: any[] | null = null;
+      let error: any = null;
+
+      if (usePersonalizedFeed) {
+        // Call personalized feed RPC function
+        const offset = reset ? 0 : recipes.length;
+        const result = await supabase.rpc('get_personalized_feed', {
+          p_user_id: currentUserId,
+          p_limit: PAGE_SIZE,
+          p_offset: offset,
+          p_search: null,
+          p_tag_filters: null
+        });
+        
+        data = result.data;
+        error = result.error;
+      } else {
+        // Standard feed query with filters
+        let q = supabase
+          .from("public_recipes_with_stats")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .limit(PAGE_SIZE);
+
+        // Tags filter
+        if (effectiveTags.length) {
+          q = q.overlaps("tags", effectiveTags);
+        }
+
+        // Search filter
+        if (debouncedSearch.length) {
+          q = q.or(makeSearchOr(debouncedSearch));
+        }
+
+        // Cursor pagination: load older than the last item
+        if (!reset && cursor) {
+          // We want: (created_at < cursor.created_at) OR (created_at = cursor.created_at AND id < cursor.id)
+          // Supabase supports .or("...") across columns with proper format.
+          q = q.or(
+            `created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`
+          );
+        }
+
+        const result = await q;
+        data = result.data;
+        error = result.error;
       }
-
-      // Search filter
-      if (debouncedSearch.length) {
-        q = q.or(makeSearchOr(debouncedSearch));
-      }
-
-      // Cursor pagination: load older than the last item
-      if (!reset && cursor) {
-        // We want: (created_at < cursor.created_at) OR (created_at = cursor.created_at AND id < cursor.id)
-        // Supabase supports .or("...") across columns with proper format.
-        q = q.or(
-          `created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`
-        );
-      }
-
-      const { data, error } = await q;
 
       if (error) {
         // fail soft
@@ -565,9 +622,11 @@ export default function FeedScreen() {
         id: toNumberId((r as any).id),
       }));
 
-      // Update cursor based on last element
-      const last = list[list.length - 1];
-      if (last?.created_at) setCursor({ created_at: last.created_at, id: last.id });
+      // Update cursor based on last element (only for non-personalized feed)
+      if (!usePersonalizedFeed) {
+        const last = list[list.length - 1];
+        if (last?.created_at) setCursor({ created_at: last.created_at, id: last.id });
+      }
 
       // hasMore
       setHasMore(list.length === PAGE_SIZE);
@@ -649,6 +708,33 @@ export default function FeedScreen() {
       setSaved((p) => (has ? [...p, id] : p.filter((x) => x !== id)));
     }
   }
+
+  const handleSupportPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setDonationModalVisible(true);
+  };
+
+  const handleTierSelect = async (tier: any) => {
+    setPurchaseLoading(true);
+    try {
+      const result = await inAppPurchaseService.purchaseItem(`flavur_support_${tier.id}`);
+      
+      if (result.success) {
+        // Show success feedback
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setDonationModalVisible(false);
+      } else {
+        // Show error feedback
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        console.error('Purchase failed:', result.error);
+      }
+    } catch (error) {
+      console.error('Purchase error:', error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setPurchaseLoading(false);
+    }
+  };
 
   function triggerHeartBurst(recipeId: number) {
     const ref = heartRefs.current.get(recipeId);
@@ -821,17 +907,8 @@ export default function FeedScreen() {
                   source={{ uri: resolveImageUrl("recipe-media", item.image_url) }} 
                   style={{ width: "100%", height: 252 }} 
                   resizeMode="cover"
-                  onError={(error: any) => {
-                    console.error('Failed to load recipe image:', item.image_url);
-                    console.error('Image URL that failed:', resolveImageUrl("recipe-media", item.image_url));
-                    console.error('Error message:', error.nativeEvent?.error || error.message || 'No message');
-                    console.error('Error code:', error.nativeEvent?.code || error.code || 'No code');
-                    
-                    // Set a fallback state to show placeholder
+                  onError={() => {
                     setFailedImages(prev => new Set(prev).add(item.id));
-                  }}
-                  onLoad={() => {
-                    console.log('Successfully loaded recipe image:', item.image_url);
                   }}
                 />
                 <LinearGradient
@@ -1189,6 +1266,7 @@ export default function FeedScreen() {
         activeTags={activeTags}
         setTagAndReload={setTagAndReload}
         isFetching={isFetching}
+        onSupportPress={handleSupportPress}
       />
 
       {/* 🔄 SCROLLING FEED */}
@@ -1216,6 +1294,13 @@ export default function FeedScreen() {
           }
         }}
         removeClippedSubviews={Platform.OS === "android"}
+      />
+
+      <DonationModal
+        visible={donationModalVisible}
+        onClose={() => setDonationModalVisible(false)}
+        onSelectTier={handleTierSelect}
+        loading={purchaseLoading}
       />
     </SafeAreaView>
   );

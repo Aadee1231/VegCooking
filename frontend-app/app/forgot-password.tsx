@@ -26,7 +26,7 @@ export default function ForgotPassword() {
     setLoading(true);
     try {
       // IMPORTANT: you must add this redirect URL in Supabase Auth settings (next section)
-      const redirectTo = "flavur://reset-password";
+      const redirectTo = "https://veg-cooking.vercel.app/reset-password";
 
       const { error } = await supabase.auth.resetPasswordForEmail(
         email.trim().toLowerCase(),

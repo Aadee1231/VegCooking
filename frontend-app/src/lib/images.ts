@@ -10,17 +10,13 @@ export function resolveImageUrl(
 ): string | undefined {
   if (!value) return undefined;
 
-  console.log('resolveImageUrl called with:', { bucket, value });
-
   // Already a full URL (safe fallback)
   if (value.startsWith("http://") || value.startsWith("https://")) {
-    console.log('Value is already a full URL, returning as-is');
     return value;
   }
 
   // Storage path → public URL
   const publicUrl = supabase.storage.from(bucket).getPublicUrl(value).data.publicUrl;
-  console.log('Generated public URL:', publicUrl);
   return publicUrl;
 }
 
@@ -43,7 +39,6 @@ export async function testImageUrl(url?: string): Promise<boolean> {
 export async function uploadImage(img: ImagePickerAsset, bucket: string, pathWithoutSuffix: string): Promise<string> {
     const fileExtension = img.uri.split('.').pop()?.toLowerCase() || 'jpg';
     const path = `${pathWithoutSuffix}_${Date.now()}.${fileExtension}`;
-    console.log('uploadImage called with:', { img, bucket, pathWithoutSuffix, fileExtension, path });
     
     try {
       const response = await fetch(img.uri);
@@ -51,7 +46,6 @@ export async function uploadImage(img: ImagePickerAsset, bucket: string, pathWit
         throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
       }
       const buffer = await response.arrayBuffer();
-      console.log('Fetched image buffer, size:', buffer.byteLength);
       
       const { error: upErr } = await supabase.storage.from(bucket).upload(path, buffer, {
         upsert: true,
@@ -59,7 +53,6 @@ export async function uploadImage(img: ImagePickerAsset, bucket: string, pathWit
       });
       
       if (upErr) throw upErr;
-      console.log('Successfully uploaded to path:', path);
       return path;
     } catch (e: any) {
       console.error("Error uploading image:", e);

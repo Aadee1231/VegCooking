@@ -1935,7 +1935,6 @@ export default function CreateScreen() {
     async (uid: string, recipeId: number) => {
       // If we have a new cover URI, upload it now
       if (coverUri) {
-        console.log('Uploading cover from URI:', coverUri);
         try {
           const response = await fetch(coverUri);
           if (!response.ok) {
@@ -1952,7 +1951,6 @@ export default function CreateScreen() {
             });
 
           if (upErr) throw upErr;
-          console.log('Successfully uploaded cover to:', path);
           return path;
         } catch (e: any) {
           console.error("Error uploading cover:", e);
@@ -1961,7 +1959,6 @@ export default function CreateScreen() {
       }
 
       // No new cover to upload, return existing path
-      console.log('No new cover to upload, returning existing path:', coverPath);
       return coverPath ?? null;
     },
     [coverUri, coverPath]

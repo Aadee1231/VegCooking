@@ -109,12 +109,6 @@ export default function UserProfileScreen() {
             borderWidth: 4, 
             borderColor: "#2e7d32",
           }}
-          onError={(error: any) => {
-            console.error('Failed to load profile avatar:', profile.avatar_url, error);
-          }}
-          onLoad={() => {
-            console.log('Successfully loaded profile avatar:', profile.avatar_url);
-          }}
         /> 
 
 
@@ -210,12 +204,6 @@ export default function UserProfileScreen() {
                 <Image
                   source={{ uri: resolveImageUrl("recipe-media", r.image_url) }}
                   style={{ width: "100%", height: 160 }}
-                  onError={(error: any) => {
-                    console.error('Failed to load recipe image in profile:', r.image_url, error);
-                  }}
-                  onLoad={() => {
-                    console.log('Successfully loaded recipe image in profile:', r.image_url);
-                  }}
                 />
               )}
 

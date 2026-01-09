@@ -107,7 +107,7 @@ export default function AuthScreen() {
 
           // If this fails, we still allow signup but tell them (rare)
           if (profileError) {
-            console.log("Profile upsert error:", profileError);
+            console.error("Profile upsert error:", profileError);
           }
         }
 
@@ -135,7 +135,7 @@ export default function AuthScreen() {
 
       router.replace("/tabs/feed");
     } catch (e: any) {
-      console.log("Auth error:", e);
+      console.error("Auth error:", e);
       toast(e?.message ?? "Something went wrong");
     } finally {
       setLoading(false);

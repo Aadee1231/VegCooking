@@ -312,9 +312,6 @@ export default function MyAccountScreen() {
                       onError={(error: any) => {
                         console.error('Failed to load profile avatar in me page:', profile.avatar_url, error);
                       }}
-                      onLoad={() => {
-                        console.log('Successfully loaded profile avatar in me page:', profile.avatar_url);
-                      }}
                     />
                   ) : (
                     <Ionicons name="person" size={56} color={theme.colors.subtext} />
@@ -725,7 +722,6 @@ function RecipeCard(props: {
   onRemove: () => void;
 }) {
   const image = props.recipe.image_url ? resolveImageUrl("recipe-media", props.recipe.image_url) : undefined;
-  console.log("Recipe image:", image);
 
   return (
     <View style={{ width: "48%" }}>
@@ -744,13 +740,6 @@ function RecipeCard(props: {
               <Image 
                 source={{ uri: image }} 
                 style={{ width: "100%", height: 120 }} 
-                onError={(error) => {
-                  console.error('Failed to load recipe image in me page:', props.recipe.image_url, image, error);
-                  console.error('Error details:', error.nativeEvent);
-                }}
-                onLoad={() => {
-                  console.log('Successfully loaded recipe image in me page:', props.recipe.image_url, image);
-                }}
               />
             ) : (
               <Ionicons name="image-outline" size={26} color={theme.colors.subtext} />

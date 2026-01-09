@@ -226,12 +226,6 @@ function CommentCard({
                   uri: resolveImageUrl("profile-avatars", c.profiles.avatar_url),
                 }}
                 style={{ width: 34, height: 34 }}
-                onError={(error: any) => {
-                  console.error('Failed to load comment avatar:', c.profiles?.avatar_url, error);
-                }}
-                onLoad={() => {
-                  console.log('Successfully loaded comment avatar:', c.profiles?.avatar_url);
-                }}
               />
             ) : (
               <Ionicons name="person-outline" size={16} color={theme.colors.subtext} />
@@ -673,12 +667,6 @@ export default function RecipeDetailScreen() {
                   height: 220,
                 }}
                 resizeMode="cover"
-                onError={(error: any) => { 
-                  console.error('Failed to load recipe hero image:', recipe?.image_url, error);
-                }}
-                onLoad={() => {
-                  console.log('Successfully loaded recipe hero image:', recipe?.image_url);
-                }}
               />
             ) : (
               <View
@@ -795,12 +783,6 @@ export default function RecipeDetailScreen() {
                   <Image 
                     source={{ uri: resolveImageUrl("profile-avatars", author.avatar_url) }}
                     style={{ width: 46, height: 46 }} 
-                    onError={(error: any) => {
-                      console.error('Failed to load author avatar:', author.avatar_url, error);
-                    }}
-                    onLoad={() => {
-                      console.log('Successfully loaded author avatar:', author.avatar_url);
-                    }}
                   />
                 ) : (
                   <Ionicons name="person-outline" size={18} color={theme.colors.subtext} />
@@ -1068,12 +1050,6 @@ export default function RecipeDetailScreen() {
                           <Image 
                             source={{ uri: resolveImageUrl("recipe-media", s.image_url) }}
                             style={{ width: "100%", height: 130 }} 
-                            onError={(error: any) => {
-                              console.error('Failed to load similar recipe image:', s.image_url, error);
-                            }}
-                            onLoad={() => {
-                              console.log('Successfully loaded similar recipe image:', s.image_url);
-                            }}
                           />
                         ) : (
                           <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>

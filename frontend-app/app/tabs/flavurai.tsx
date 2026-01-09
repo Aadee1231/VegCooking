@@ -403,7 +403,7 @@ export default function FlavurAIScreen() {
                   textAlign: "center",
                 }}
               >
-                You’re on the waitlist 🎉
+                You're on the waitlist 🎉
               </Text>
               <Text
                 style={{
@@ -414,7 +414,7 @@ export default function FlavurAIScreen() {
                   lineHeight: 20,
                 }}
               >
-                Thank you for joining! We’ll keep you updated as FlavurAI gets closer to launch.
+                Thank you for joining! We'll keep you updated as FlavurAI gets closer to launch.
               </Text>
             </View>
           )}

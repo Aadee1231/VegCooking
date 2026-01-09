@@ -30,14 +30,12 @@ export function SafeImage({
   const [hasError, setHasError] = useState(false);
 
   const handleError = (error: any) => {
-    console.error('SafeImage failed to load:', uri, error);
     setHasError(true);
     setLoading(false);
     onError?.(error);
   };
 
   const handleLoad = () => {
-    console.log('SafeImage loaded successfully:', uri);
     setLoading(false);
     setHasError(false);
     onLoad?.();
